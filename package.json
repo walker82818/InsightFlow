@@ -1,0 +1,18 @@
+{
+  "name": "insightflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "InsightFlow — AI Data Analysis & Visualization Agent",
+  "scripts": {
+    "dev": "pnpm --filter @insightflow/web dev",
+    "build": "pnpm --filter @insightflow/web build",
+    "lint": "pnpm --filter @insightflow/web lint",
+    "api:install": "pnpm --filter @insightflow/api install",
+    "api:dev": "pnpm --filter @insightflow/api dev"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@10.27.0"
+}

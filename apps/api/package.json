@@ -1,0 +1,10 @@
+{
+  "name": "@insightflow/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "InsightFlow backend (FastAPI)",
+  "scripts": {
+    "dev": "uvicorn app.main:app --reload --port 8000",
+    "start": "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  }
+}
