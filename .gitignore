@@ -38,3 +38,10 @@ _unpack.py
 _source_design.md
 data/
 *.csv
+
+# Runtime logs (server stdout/stderr redirection)
+*.err
+*.out
+
+# Dev scratch scripts in api root (underscore-prefixed)
+apps/api/_*
