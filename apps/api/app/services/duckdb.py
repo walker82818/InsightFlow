@@ -108,7 +108,11 @@ def register_dataset(dataset_id: str, storage_path: str, file_type: str) -> str:
     if ft == "csv":
         source = "read_csv_auto(?)"
     elif ft in ("xlsx", "xls"):
-        source = "read_xlsx(?, sheet=1)"
+        # DuckDB's read_xlsx takes `sheet` as a 1-based integer index OR a sheet
+        # name string. Passing sheet=1 means "2nd sheet" (1-indexed), which fails
+        # for the common single "Sheet1" workbooks. Omitting `sheet` reads the
+        # first/default sheet, which is what we want.
+        source = "read_xlsx(?)"
     elif ft == "json":
         source = "read_json_auto(?)"
     elif ft == "parquet":
@@ -120,9 +124,13 @@ def register_dataset(dataset_id: str, storage_path: str, file_type: str) -> str:
     os.makedirs(os.path.dirname(db), exist_ok=True)
     con = duckdb.connect(db)
     try:
+        # Drop first so a previously-failed registration (e.g. wrong xlsx sheet)
+        # cannot leave a corrupt/stale catalog entry behind.
+        con.execute(f'DROP TABLE IF EXISTS "{table}"')
         con.execute(
-            f'CREATE OR REPLACE TABLE "{table}" AS SELECT * FROM {source}', [path]
+            f'CREATE TABLE "{table}" AS SELECT * FROM {source}', [path]
         )
+        con.execute("CHECKPOINT")
     finally:
         con.close()
     return table
@@ -171,7 +179,13 @@ def query(sql: str, timeout: int | None = None) -> dict[str, Any]:
     timeout = timeout or settings.sandbox_timeout
 
     def _run() -> tuple[list[str], list[tuple]]:
-        con = duckdb.connect(db, read_only=True)
+        # NOTE: we open the connection read-write (not read_only). On a file-backed
+        # DuckDB database, a read-only connection and a read-write connection
+        # (e.g. the one used by register_dataset) cannot coexist safely and
+        # produce spurious "Catalog write-write conflict" errors. Data integrity
+        # is still guaranteed because assert_readonly() rejects any mutating SQL
+        # before it ever reaches DuckDB.
+        con = duckdb.connect(db)
         try:
             rel = con.execute(sql)
             cols = [d[0] for d in rel.description] if rel.description else []
@@ -192,3 +206,77 @@ def query(sql: str, timeout: int | None = None) -> dict[str, Any]:
             raise DuckDBError(f"duckdb error: {exc}") from exc
 
     return _to_result(cols, data, settings.max_sql_rows)
+
+
+def _pg_connstring(conn: dict) -> str:
+    user = conn.get("username") or ""
+    pw = conn.get("password") or ""
+    host = conn.get("host") or "localhost"
+    port = conn.get("port") or 5432
+    dbname = conn.get("database") or ""
+    return f"postgresql://{user}:{pw}@{host}:{port}/{dbname}"
+
+
+def _mysql_connstring(conn: dict) -> str:
+    user = conn.get("username") or ""
+    pw = conn.get("password") or ""
+    host = conn.get("host") or "localhost"
+    port = conn.get("port") or 3306
+    dbname = conn.get("database") or ""
+    return f"mysql://{user}:{pw}@{host}:{port}/{dbname}"
+
+
+def register_db_dataset(
+    dataset_id: str,
+    db_type: str,
+    conn: dict[str, Any],
+    table: str,
+    schema: str = "public",
+) -> dict[str, Any]:
+    """把远程数据库表物化为 DuckDB 表，返回 {table, row_count, column_count}。"""
+    table_name = _table_name(dataset_id)
+    db = _db_path()
+    os.makedirs(os.path.dirname(db), exist_ok=True)
+    con = duckdb.connect(db)
+    try:
+        con.execute("SET enable_external_access = true;")
+        con.execute("SET lock_configuration = false;")
+        dt = (db_type or "").lower()
+        if dt == "postgres":
+            con.execute("INSTALL postgres; LOAD postgres;")
+            src = f"postgres_scan('{_pg_connstring(conn)}', '{schema or 'public'}', '{table}')"
+        elif dt == "sqlite":
+            con.execute("INSTALL sqlite; LOAD sqlite;")
+            src = f"sqlite_scan('{conn.get('database') or ''}', '{table}')"
+        elif dt == "mysql":
+            con.execute("INSTALL mysql; LOAD mysql;")
+            src = f"mysql_scan('{_mysql_connstring(conn)}', '{table}')"
+        else:
+            raise DuckDBError(f"unsupported db_type: {db_type}")
+        con.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+        con.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM {src}')
+        con.execute("CHECKPOINT")
+        row_count = con.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()[0]
+        column_count = len(con.execute(f'DESCRIBE "{table_name}"').description)
+    finally:
+        con.close()
+    return {
+        "table": table_name,
+        "row_count": int(row_count),
+        "column_count": int(column_count),
+    }
+
+
+def sample_table(table_name: str, limit: int = 200000) -> "pd.DataFrame":
+    """读取已注册表的样本（用于画像），返回 DataFrame。"""
+    import pandas as pd
+
+    db = _db_path()
+    con = duckdb.connect(db)
+    try:
+        con.execute("SET enable_external_access = true;")
+        con.execute("SET lock_configuration = false;")
+        df = con.execute(f'SELECT * FROM "{table_name}" LIMIT {int(limit)}').df()
+    finally:
+        con.close()
+    return df

@@ -1,0 +1,36 @@
+{
+  "name": "销售基础数据集",
+  "description": "各地区销售代表的销售额与订单数，用于验证基础聚合、分组柱状图与 TOP-N。",
+  "columns": ["region", "sales_rep", "amount", "orders"],
+  "rows": [
+    ["华东", "张三", 1200.5, 12],
+    ["华东", "李四", 980.0, 9],
+    ["华北", "王五", 1500.0, 15],
+    ["华北", "赵六", 720.0, 7],
+    ["华南", "钱七", 1100.0, 11],
+    ["华南", "孙八", 640.0, 6],
+    ["西南", "周九", 430.0, 4],
+    ["西南", "吴十", 510.0, 5]
+  ],
+  "cases": [
+    {
+      "id": "basic-1",
+      "question": "请分析各地区的销售总额，并用柱状图展示。",
+      "expected_tools": ["sql_execute"],
+      "expected_sql_keywords": ["sum", "group by", "region"],
+      "expected_min_rows": 4,
+      "expected_chart": {"type": "bar", "xField": "region"},
+      "expected_answer_substrings": ["华东", "华北", "华南", "西南"],
+      "evaluate_report": true
+    },
+    {
+      "id": "basic-2",
+      "question": "哪个销售代表的订单数最多？给出数据依据。",
+      "expected_tools": ["sql_execute"],
+      "expected_sql_keywords": ["order by", "orders"],
+      "expected_min_rows": 1,
+      "expected_chart": {"type": "bar"},
+      "expected_answer_substrings": ["王五"]
+    }
+  ]
+}

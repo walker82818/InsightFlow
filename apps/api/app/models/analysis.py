@@ -29,6 +29,10 @@ class Analysis(Base):
     dataset_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("datasets.id", ondelete="CASCADE"), index=True
     )
+    # JSON array of dataset ids participating in this (possibly multi-document)
+    # analysis. `dataset_id` above is the representative/primary dataset (== the
+    # first id in this list).
+    dataset_ids: Mapped[str] = mapped_column(Text, default="[]")
 
     query: Mapped[str] = mapped_column(Text)
     # pending -> running -> completed | error

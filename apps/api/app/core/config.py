@@ -44,11 +44,28 @@ class Settings(BaseSettings):
     # Python sandbox (Docker)
     sandbox_docker_image: str = "insightflow-sandbox:latest"
     sandbox_timeout: int = 30
+    # 安全开关：当 Docker 镜像不存在时，是否允许用「服务器同权限的本地进程」跑
+    # LLM 生成的任意代码。默认 False = 安全（禁用 python 工具，避免 RCE）。
+    # 仅开发机且明确信任输入时才可临时置 True。
+    sandbox_allow_local_fallback: bool = False
 
     # DuckDB analysis engine (Phase 2)
     # File-backed in-memory-style OLAP store; tables persist across restarts.
     duckdb_path: str = "data/insightflow.duckdb"
     max_sql_rows: int = 200  # cap rows returned to the LLM / frontend
+
+    # Agent loop (Phase 3, LangGraph)
+    agent_max_steps: int = 6  # max ReAct steps inside the analysis node
+    agent_max_retries: int = 2  # Reviewer 触发重分析（ReAct 内循环）的最大轮次
+    max_chart_rows: int = 200  # rows fed into a generated ChartSpec
+    # 全局分析墙钟超时（秒）：兜底防止 LLM 慢/死循环导致 SSE 无限挂起。
+    # 单个工具调用另有 sandbox_timeout 限制；此项覆盖整条 pipeline。
+    agent_total_timeout: int = 180
+
+    # Python sandbox (Docker) — overrides in .env if needed
+    sandbox_memory: str = "512m"
+    sandbox_cpus: float = 1.0
+    # image built from /sandbox/Dockerfile: `docker build -t insightflow-sandbox ./sandbox`
 
     # LLM provider abstraction (default: domestic models, OpenAI-compatible)
     llm_provider: str = "deepseek"
@@ -56,6 +73,15 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     small_model: str = "deepseek-chat"
     large_model: str = "deepseek-reasoner"
+
+    # Trace cost estimation (Phase 6): rough price per 1K tokens (USD).
+    trace_cost_per_1k_prompt: float = 0.001
+    trace_cost_per_1k_completion: float = 0.002
+
+    # Optional Langfuse observability (Phase 6). Leave empty to disable.
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
 
 
 @lru_cache

@@ -1,0 +1,54 @@
+{
+  "name": "电商订单明细（复杂）",
+  "description": "含日期/品类/地区/金额/数量的订单明细，用于验证时间序列、占比、TOP-N 与 Python 计算。",
+  "columns": ["order_date", "category", "region", "amount", "quantity"],
+  "rows": [
+    ["2024-01-05", "电子产品", "华东", 320.0, 2],
+    ["2024-01-12", "家居", "华北", 150.0, 1],
+    ["2024-02-03", "电子产品", "华南", 410.0, 3],
+    ["2024-02-20", "服饰", "华东", 220.0, 4],
+    ["2024-03-08", "家居", "华北", 180.0, 2],
+    ["2024-03-15", "电子产品", "西南", 360.0, 2],
+    ["2024-04-02", "服饰", "华南", 260.0, 3],
+    ["2024-04-18", "电子产品", "华东", 500.0, 4],
+    ["2024-05-09", "家居", "华北", 140.0, 1],
+    ["2024-05-22", "服饰", "西南", 300.0, 2]
+  ],
+  "cases": [
+    {
+      "id": "complex-1",
+      "question": "按月份统计销售额的变化趋势，用折线图展示。",
+      "expected_tools": ["sql_execute"],
+      "expected_sql_keywords": ["strftime", "group by", "sum", "amount"],
+      "expected_min_rows": 3,
+      "expected_chart": {"type": "line"},
+      "expected_answer_substrings": ["2024"]
+    },
+    {
+      "id": "complex-2",
+      "question": "各品类销售额占比如何？用饼图展示。",
+      "expected_tools": ["sql_execute"],
+      "expected_sql_keywords": ["sum", "group by", "category"],
+      "expected_min_rows": 3,
+      "expected_chart": {"type": "pie"},
+      "expected_answer_substrings": ["电子产品", "家居", "服饰"]
+    },
+    {
+      "id": "complex-3",
+      "question": "销售额最高的地区是哪一个？",
+      "expected_tools": ["sql_execute"],
+      "expected_sql_keywords": ["group by", "region", "sum"],
+      "expected_min_rows": 3,
+      "expected_answer_substrings": ["华东", "华南", "华北", "西南"]
+    },
+    {
+      "id": "complex-4",
+      "question": "计算各订单的平均客单价（金额/数量），并找出最高的订单。",
+      "expected_tools": ["sql_execute", "python_execute"],
+      "expected_sql_keywords": ["amount", "quantity"],
+      "expected_min_rows": 1,
+      "expected_chart": {"type": "bar"},
+      "expected_answer_substrings": []
+    }
+  ]
+}

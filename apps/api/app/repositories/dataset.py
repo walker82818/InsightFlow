@@ -14,6 +14,21 @@ from app.schemas.dataset import DatasetColumnOut
 
 
 def _to_summary(ds: Dataset) -> dict[str, Any]:
+    source_type = ds.source_type or "file"
+    db_info = None
+    if source_type == "db" and ds.connection_json:
+        try:
+            conn = json.loads(ds.connection_json)
+            db_info = {
+                "db_type": conn.get("db_type"),
+                "host": conn.get("host"),
+                "port": conn.get("port"),
+                "database": conn.get("database"),
+                "schema": conn.get("schema"),
+                "table": conn.get("table"),
+            }
+        except Exception:
+            db_info = None
     return {
         "id": ds.id,
         "name": ds.name,
@@ -24,6 +39,8 @@ def _to_summary(ds: Dataset) -> dict[str, Any]:
         "column_count": ds.column_count,
         "status": ds.status,
         "created_at": ds.created_at,
+        "source_type": source_type,
+        "db_info": db_info,
         "columns": [
             DatasetColumnOut(
                 name=c.name, type=c.dtype, position=c.position,
@@ -53,6 +70,8 @@ async def create_dataset(
     profile: dict[str, Any],
     preview: list[dict[str, Any]],
     columns: list[dict[str, Any]],
+    source_type: str = "file",
+    connection_json: str = "{}",
 ) -> Dataset:
     ds = Dataset(
         user_id=user_id,
@@ -61,6 +80,8 @@ async def create_dataset(
         file_type=file_type,
         file_size=file_size,
         storage_path=storage_path,
+        source_type=source_type,
+        connection_json=connection_json,
         row_count=profile.get("row_count", 0),
         column_count=profile.get("column_count", 0),
         profile_json=json.dumps(profile, default=str),

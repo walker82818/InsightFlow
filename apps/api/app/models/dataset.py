@@ -36,9 +36,14 @@ class Dataset(Base):
 
     name: Mapped[str] = mapped_column(String(255))
     file_name: Mapped[str] = mapped_column(String(255))
-    file_type: Mapped[str] = mapped_column(String(20))  # csv | xlsx | xls | json
+    file_type: Mapped[str] = mapped_column(String(20))  # csv | xlsx | xls | json | postgres | mysql | sqlite
     file_size: Mapped[int] = mapped_column(Integer, default=0)
     storage_path: Mapped[str] = mapped_column(Text)
+
+    # 数据来源类型：file（上传文件）| db（直连数据库）
+    source_type: Mapped[str] = mapped_column(String(16), default="file", nullable=False)
+    # 直连数据库的连接信息（含密码，仅服务端使用，API 响应中脱敏）
+    connection_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
 
     row_count: Mapped[int] = mapped_column(Integer, default=0)
     column_count: Mapped[int] = mapped_column(Integer, default=0)

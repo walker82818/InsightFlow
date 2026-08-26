@@ -23,5 +23,15 @@ minio>=7.2
 duckdb>=1.1          # 本地 OLAP，CSV/Parquet 直接 SQL
 openai>=1.5         # provider 抽象（OpenAI 兼容协议）
 
+# Python sandbox fallback runtime (Phase 3): local restricted exec used when the
+# Docker image is unavailable (e.g. Docker Hub unreachable). The production path
+# still runs the image built from /sandbox/Dockerfile inside Docker.
+pandas>=2.2
+numpy>=2.1
+
 # HTTP client (LLM provider abstraction)
 httpx>=0.27
+
+# Observability (Phase 6): optional. Only imported lazily by
+# app/services/langfuse_exporter.py when LANGFUSE_* keys are set; safe to omit.
+langfuse>=2.0

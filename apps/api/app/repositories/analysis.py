@@ -14,10 +14,19 @@ async def create_analysis(
     session: AsyncSession,
     *,
     user_id: str,
-    dataset_id: str,
+    dataset_ids: list[str],
     query: str,
+    dataset_id: str | None = None,
 ) -> Analysis:
-    row = Analysis(user_id=user_id, dataset_id=dataset_id, query=query, status="pending")
+    if not dataset_id:
+        dataset_id = dataset_ids[0]
+    row = Analysis(
+        user_id=user_id,
+        dataset_id=dataset_id,
+        dataset_ids=json.dumps(dataset_ids, ensure_ascii=False),
+        query=query,
+        status="pending",
+    )
     session.add(row)
     await session.commit()
     await session.refresh(row)
@@ -29,14 +38,22 @@ async def get_analysis(session: AsyncSession, analysis_id: str) -> Analysis | No
 
 
 async def list_analyses(
-    session: AsyncSession, user_id: str, limit: int = 50
+    session: AsyncSession,
+    user_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    dataset_id: str | None = None,
 ) -> list[Analysis]:
-    stmt = (
-        select(Analysis)
-        .where(Analysis.user_id == user_id)
-        .order_by(Analysis.created_at.desc())
-        .limit(limit)
-    )
+    stmt = select(Analysis).where(Analysis.user_id == user_id)
+
+    if dataset_id:
+        # Match the primary dataset or any dataset listed in the JSON `dataset_ids`.
+        stmt = stmt.where(
+            (Analysis.dataset_id == dataset_id)
+            | Analysis.dataset_ids.contains(f'"{dataset_id}"')
+        )
+
+    stmt = stmt.order_by(Analysis.created_at.desc()).limit(limit).offset(offset)
     res = await session.execute(stmt)
     return list(res.scalars().all())
 
@@ -66,13 +83,28 @@ async def finish_analysis(
     await session.commit()
 
 
+def _parse_ids(raw: Any) -> list[str]:
+    if not raw:
+        return []
+    try:
+        v = json.loads(raw)
+        return v if isinstance(v, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
 def to_summary(row: Analysis) -> dict[str, Any]:
     return {
         "id": row.id,
         "dataset_id": row.dataset_id,
+        "dataset_ids": _parse_ids(row.dataset_ids),
         "query": row.query,
         "status": row.status,
+        "answer": (row.answer or "")[:200],
+        "prompt_tokens": row.prompt_tokens,
+        "completion_tokens": row.completion_tokens,
         "created_at": row.created_at,
+        "updated_at": row.updated_at,
     }
 
 
@@ -84,6 +116,7 @@ def to_detail(row: Analysis) -> dict[str, Any]:
     return {
         "id": row.id,
         "dataset_id": row.dataset_id,
+        "dataset_ids": _parse_ids(row.dataset_ids),
         "query": row.query,
         "status": row.status,
         "answer": row.answer,
@@ -92,4 +125,42 @@ def to_detail(row: Analysis) -> dict[str, Any]:
         "completion_tokens": row.completion_tokens,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
+    }
+
+
+async def get_trace(
+    session: AsyncSession, analysis_id: str
+) -> dict[str, Any] | None:
+    """Return the latest AgentRun trace (run summary + steps + tool calls)."""
+    from app.models.trace import AgentRun, AgentStep, ToolCall
+
+    run = (
+        await session.execute(
+            select(AgentRun)
+            .where(AgentRun.analysis_id == analysis_id)
+            .order_by(AgentRun.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if run is None:
+        return None
+
+    steps = (
+        await session.execute(
+            select(AgentStep)
+            .where(AgentStep.run_id == run.id)
+            .order_by(AgentStep.order_idx)
+        )
+    ).scalars().all()
+    tool_calls = (
+        await session.execute(
+            select(ToolCall)
+            .where(ToolCall.run_id == run.id)
+            .order_by(ToolCall.ts_ms)
+        )
+    ).scalars().all()
+    return {
+        "run": run.to_summary(),
+        "steps": [s.to_dict() for s in steps],
+        "tool_calls": [t.to_dict() for t in tool_calls],
     }

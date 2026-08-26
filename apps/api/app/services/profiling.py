@@ -124,8 +124,8 @@ def _native(v: Any) -> Any:
     return v
 
 
-def profile_bytes(data: bytes, file_type: str) -> dict[str, Any]:
-    df = _read_dataframe(data, file_type)
+def profile_dataframe(df: pd.DataFrame) -> dict[str, Any]:
+    """对 DataFrame 做字段级画像，返回 {columns, profile, preview, row_count, column_count}。"""
     row_count = int(len(df))
     column_count = int(len(df.columns))
 
@@ -156,6 +156,11 @@ def profile_bytes(data: bytes, file_type: str) -> dict[str, Any]:
         "row_count": row_count,
         "column_count": column_count,
     }
+
+
+def profile_bytes(data: bytes, file_type: str) -> dict[str, Any]:
+    df = _read_dataframe(data, file_type)
+    return profile_dataframe(df)
 
 
 def _preview(df: pd.DataFrame) -> list[dict[str, Any]]:

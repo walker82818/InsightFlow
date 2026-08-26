@@ -1,6 +1,6 @@
-"""Agent orchestration (Phase 2)."""
+"""Agent orchestration (Phase 3, LangGraph)."""
 from __future__ import annotations
 
-from app.agent.single_agent import AnalysisResult, DatasetRef, run_analysis
+from app.agent.single_agent import DatasetRef, run_analysis
 
-__all__ = ["DatasetRef", "AnalysisResult", "run_analysis"]
+__all__ = ["DatasetRef", "run_analysis"]

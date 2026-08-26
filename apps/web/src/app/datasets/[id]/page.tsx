@@ -1,179 +1,124 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { getDataset } from "@/lib/api";
-import type { DatasetColumn, DatasetDetail } from "@/types/dataset";
+import { useEffect, useState, use } from "react";
+import { getDataset, errMsg } from "@/lib/api";
+import type { DatasetDetail } from "@/types/dataset";
+import AnalysisChat from "@/components/AnalysisChat";
+import AnalysisHistory from "@/components/AnalysisHistory";
+import HistoryDetail, { type HistoryPayload } from "@/components/HistoryDetail";
+import DatasetStructureView from "@/components/DatasetStructureView";
 
-const TYPE_BADGE: Record<string, string> = {
-  string: "bg-slate-100 text-slate-700",
-  integer: "bg-emerald-100 text-emerald-700",
-  float: "bg-sky-100 text-sky-700",
-  date: "bg-violet-100 text-violet-700",
-  category: "bg-amber-100 text-amber-700",
-  boolean: "bg-pink-100 text-pink-700",
-};
-
-function StatLine({ label, value }: { label: string; value: unknown }) {
-  if (value === undefined || value === null || value === "") return null;
-  return (
-    <div className="flex justify-between gap-2 text-xs">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-mono text-slate-800">{String(value)}</span>
-    </div>
-  );
-}
-
-function ColumnStats({ col }: { col: DatasetColumn }) {
-  const s = col.stats;
-  return (
-    <div className="space-y-1">
-      <StatLine label="计数" value={s.count} />
-      <StatLine label="缺失" value={s.missing !== undefined ? `${s.missing} (${(s.missing_ratio as number) * 100}%)` : undefined} />
-      <StatLine label="去重" value={s.distinct} />
-      {col.type === "integer" || col.type === "float" ? (
-        <>
-          <StatLine label="最小" value={s.min} />
-          <StatLine label="最大" value={s.max} />
-          <StatLine label="均值" value={s.mean} />
-          <StatLine label="中位" value={s.median} />
-          <StatLine label="标准差" value={s.std} />
-        </>
-      ) : null}
-      {col.type === "date" ? (
-        <>
-          <StatLine label="最早" value={s.min} />
-          <StatLine label="最晚" value={s.max} />
-        </>
-      ) : null}
-      {col.type === "string" ? <StatLine label="平均长度" value={s.avg_length} /> : null}
-      {col.type === "category" || col.type === "boolean" ? (
-        <div className="pt-1">
-          <p className="text-xs text-slate-500">Top 值</p>
-          <ul className="mt-1 space-y-0.5">
-            {((s.top_values as { value: unknown; count: number }[]) ?? []).map(
-              (t) => (
-                <li key={String(t.value)} className="flex justify-between text-xs">
-                  <span className="text-slate-700">{String(t.value)}</span>
-                  <span className="font-mono text-slate-500">{t.count}</span>
-                </li>
-              ),
-            )}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-export default function DatasetDetailPage() {
-  const params = useParams();
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  const [data, setData] = useState<DatasetDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function DatasetPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const [dataset, setDataset] = useState<DatasetDetail | null>(null);
+  const [seed, setSeed] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [historySignal, setHistorySignal] = useState(0);
+  const [history, setHistory] = useState<HistoryPayload | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    getDataset(id)
-      .then(setData)
-      .catch((e) => setError((e as Error).message))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await getDataset(id);
+        if (!cancelled) setDataset(d);
+      } catch (e) {
+        if (!cancelled) setLoadError(errMsg(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  if (loading) return <p className="text-sm text-slate-500">加载中…</p>;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
-  if (!data) return <p className="text-sm text-slate-500">未找到数据集</p>;
+  if (loadError) {
+    return (
+      <div className="card flex flex-col items-center gap-3 px-6 py-16 text-center">
+        <div className="text-danger">加载失败：{loadError}</div>
+        <button className="btn btn-ghost" onClick={() => location.reload()}>
+          重试
+        </button>
+      </div>
+    );
+  }
 
-  const previewCols = data.preview[0] ? Object.keys(data.preview[0]) : [];
+  if (!dataset) {
+    return (
+      <div className="space-y-4">
+        <div className="skeleton h-24 w-full rounded-[28px]" />
+        <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+          <div className="skeleton h-[60vh] w-full rounded-[24px]" />
+          <div className="skeleton h-[60vh] w-full rounded-[24px]" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href="/datasets" className="text-sm text-indigo-600 hover:underline">
-            ← 返回数据集
-          </Link>
-          <h1 className="mt-1 text-xl font-bold text-slate-900">{data.name}</h1>
-          <p className="text-xs text-slate-500">
-            {data.file_name} · {data.file_type.toUpperCase()}
-          </p>
-        </div>
-      </div>
-
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          ["行数", data.profile.row_count],
-          ["列数", data.profile.column_count],
-          ["重复行", data.profile.duplicate_rows],
-          ["缺失值", `${data.profile.total_missing} (${(data.profile.missing_ratio * 100).toFixed(1)}%)`],
-        ].map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200"
-          >
-            <p className="text-xs text-slate-500">{label}</p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-        <h2 className="border-b border-slate-100 p-4 text-sm font-semibold text-slate-700">
-          Schema 与字段统计
-        </h2>
-        <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-3">
-          {data.columns.map((c) => (
-            <div key={c.name} className="bg-white p-4">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-900">{c.name}</span>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-medium ${TYPE_BADGE[c.type] ?? "bg-slate-100 text-slate-700"}`}
-                >
-                  {c.type}
-                </span>
-              </div>
-              <div className="mt-2">
-                <ColumnStats col={c} />
-              </div>
+      {/* Header */}
+      <section className="card fade-up p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="eyebrow">
+              数据集 · {dataset.row_count} 行 · {dataset.column_count} 列 ·{" "}
+              <span className="uppercase">{dataset.file_type}</span>
             </div>
-          ))}
+            <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-ink">
+              {dataset.name}
+            </h1>
+          </div>
+          <span className="tag tag-pine shrink-0">就绪</span>
+        </div>
+
+        <div className="mt-5 border-t border-line pt-4">
+          <label className="eyebrow">分析侧重（可选）</label>
+          <p className="mt-1 text-xs text-faint">
+            告诉 Agent 你更关心什么，例如「重点关注转化漏斗与留存」。会随每次提问一起发送。
+          </p>
+          <textarea
+            className="input mt-2 min-h-[52px] resize-none"
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+            placeholder="例如：重点分析用户留存与高价值人群特征"
+          />
         </div>
       </section>
 
-      <section className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-        <h2 className="border-b border-slate-100 p-4 text-sm font-semibold text-slate-700">
-          数据预览（前 {data.preview.length} 行）
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-500">
-              <tr>
-                {previewCols.map((col) => (
-                  <th key={col} className="p-3 font-medium">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.preview.map((row, i) => (
-                <tr key={i} className="border-b border-slate-100 last:border-0">
-                  {previewCols.map((col) => (
-                    <td key={col} className="p-3 font-mono text-xs text-slate-700">
-                      {row[col] === null || row[col] === undefined
-                        ? "—"
-                        : String(row[col])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Main grid —— 主对话区（左）常驻；历史详情以覆盖层嵌在主对话区内，不改变整体布局 */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="relative">
+          <AnalysisChat
+            datasetId={id}
+            seed={seed}
+            onAnalysisDone={() => setHistorySignal((n) => n + 1)}
+          />
+          {historyLoading && !history && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center rounded-[24px] bg-paper/80">
+              <div className="card px-6 py-4 text-sm text-muted">正在加载历史分析…</div>
+            </div>
+          )}
+          {history && (
+            <div className="absolute inset-0 z-50 overflow-auto rounded-[24px] bg-paper p-5 shadow-inner">
+              <HistoryDetail payload={history} onBack={() => setHistory(null)} />
+            </div>
+          )}
         </div>
-      </section>
+        <aside className="space-y-6">
+          <DatasetStructureView dataset={dataset} />
+          <AnalysisHistory
+            datasetId={id}
+            refreshSignal={historySignal}
+            onSelect={setHistory}
+            onSelectLoading={setHistoryLoading}
+          />
+        </aside>
+      </div>
     </div>
   );
 }

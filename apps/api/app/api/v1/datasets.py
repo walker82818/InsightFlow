@@ -8,7 +8,9 @@ Endpoints:
 """
 from __future__ import annotations
 
+import json
 import os
+import uuid
 from functools import lru_cache
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -17,8 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_session
 from app.repositories import dataset as repo
-from app.schemas.dataset import DatasetDetailOut, DatasetSummaryOut
-from app.services.profiling import ProfilingError, profile_bytes
+from app.schemas.dataset import DBConnectRequest, DatasetDetailOut, DatasetSummaryOut
+from app.services import duckdb
+from app.services.profiling import ProfilingError, profile_bytes, profile_dataframe
 from app.services.storage import StorageBackend, StorageError, build_storage
 
 router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
@@ -86,6 +89,63 @@ async def upload_dataset(
         profile=result["profile"],
         preview=result["preview"],
         columns=result["columns"],
+    )
+    return DatasetDetailOut(**repo.to_detail(ds))
+
+
+@router.post("/connect", response_model=DatasetDetailOut, status_code=201)
+async def connect_database(
+    payload: DBConnectRequest,
+    session: AsyncSession = Depends(get_session),
+) -> DatasetDetailOut:
+    """直连数据库并把指定表物化为可分析的数据集（Agent 后续可像普通数据集一样查询）。"""
+    dataset_id = str(uuid.uuid4())
+    conn = {
+        "db_type": payload.db_type,
+        "host": payload.host,
+        "port": payload.port,
+        "username": payload.username,
+        "password": payload.password,
+        "database": payload.database,
+        "schema": payload.schema,
+        "table": payload.table,
+    }
+    try:
+        info = duckdb.register_db_dataset(
+            dataset_id,
+            payload.db_type,
+            conn,
+            payload.table,
+            payload.schema or "public",
+        )
+        df = duckdb.sample_table(info["table"])
+        prof = profile_dataframe(df)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=422, detail=f"连接或导入数据库失败：{exc}"
+        ) from exc
+
+    ds = await repo.create_dataset(
+        session,
+        user_id=settings.default_user_id,
+        name=payload.name,
+        file_name=payload.table,
+        file_type=payload.db_type,
+        file_size=0,
+        storage_path="",
+        profile=prof["profile"],
+        preview=prof["preview"],
+        columns=[
+            {
+                "name": c["name"],
+                "type": c["type"],
+                "position": c["position"],
+                "stats": c["stats"],
+            }
+            for c in prof["columns"]
+        ],
+        source_type="db",
+        connection_json=json.dumps(conn, default=str),
     )
     return DatasetDetailOut(**repo.to_detail(ds))
 

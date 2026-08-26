@@ -40,12 +40,16 @@ SQL_TOOL_SPEC: dict[str, Any] = {
 
 
 def run_sql_tool(
-    dataset_id: str,
-    storage_path: str,
-    file_type: str,
+    datasets: list[dict[str, Any]],
     sql: str,
     timeout: int | None = None,
 ) -> dict[str, Any]:
-    """Register (if needed) and query the dataset. Returns a JSON-safe dict."""
-    duckdb_svc.register_dataset(dataset_id, storage_path, file_type)
+    """Register every referenced dataset (idempotent) then run read-only SQL.
+
+    ``datasets`` is a list of DatasetRef-style dicts (keys: id, storage_path,
+    file_type). Registering all of them up front lets the SQL JOIN across tables,
+    enabling multi-document analysis.
+    """
+    for d in datasets:
+        duckdb_svc.register_dataset(d["id"], d["storage_path"], d["file_type"])
     return duckdb_svc.query(sql, timeout=timeout)

@@ -1,9 +1,298 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light;
+/* ============================================================
+   InsightFlow — Design System
+   Warm editorial-data aesthetic: paper canvas, warm ink,
+   a single confident ember accent. Calm, intelligent, humane.
+   ============================================================ */
+
+@theme {
+  /* Surfaces */
+  --color-paper: #f7f6f2;
+  --color-paper-2: #f1efe9;
+  --color-surface: #ffffff;
+  --color-surface-2: #fcfbf9;
+
+  /* Ink */
+  --color-ink: #1b1a17;
+  --color-ink-soft: #44423c;
+  --color-muted: #847f73;
+  --color-faint: #a8a297;
+
+  /* Lines */
+  --color-line: #e7e3da;
+  --color-line-strong: #d8d3c7;
+
+  /* Accent — ember (insight / primary action) */
+  --color-accent: #d9532e;
+  --color-accent-strong: #b8431f;
+  --color-accent-soft: #fbeee8;
+  --color-accent-ring: rgba(217, 83, 46, 0.18);
+
+  /* Semantic */
+  --color-pine: #2f7a64;
+  --color-pine-soft: #e7f1ec;
+  --color-amber: #c8842b;
+  --color-amber-soft: #f8efdd;
+  --color-danger: #c0392b;
+  --color-danger-soft: #fbeae8;
+
+  /* Type */
+  --font-display: "Sora", ui-sans-serif, system-ui, "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+    monospace;
+
+  /* Shape */
+  --radius-card: 18px;
+  --radius-tile: 14px;
+
+  /* Motion */
+  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.018em;
+    color: var(--color-ink);
+  }
+  ::selection {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+  }
+  /* Refined scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-faint);
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /* Card / surface */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: 0 1px 2px rgba(27, 26, 23, 0.04),
+      0 8px 24px -16px rgba(27, 26, 23, 0.18);
+  }
+  .tile {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-tile);
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1;
+    padding: 0.625rem 1rem;
+    border-radius: 0.7rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.18s var(--ease-out-quart),
+      background-color 0.18s ease, box-shadow 0.18s ease,
+      border-color 0.18s ease, color 0.18s ease;
+    white-space: nowrap;
+  }
+  .btn:active {
+    transform: translateY(1px) scale(0.99);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: #fff;
+    box-shadow: 0 6px 18px -8px var(--color-accent-ring);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-accent-strong);
+    box-shadow: 0 10px 22px -8px var(--color-accent-ring);
+  }
+  .btn-ghost {
+    background: var(--color-surface);
+    border-color: var(--color-line);
+    color: var(--color-ink-soft);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    border-color: var(--color-line-strong);
+    color: var(--color-ink);
+    background: var(--color-surface-2);
+  }
+  .btn-quiet {
+    background: transparent;
+    color: var(--color-muted);
+  }
+  .btn-quiet:hover:not(:disabled) {
+    color: var(--color-ink);
+    background: var(--color-paper-2);
+  }
+
+  /* Tag / chip */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line);
+    color: var(--color-ink-soft);
+    background: var(--color-surface-2);
+  }
+  .tag-accent {
+    background: var(--color-accent-soft);
+    border-color: transparent;
+    color: var(--color-accent-strong);
+  }
+  .tag-pine {
+    background: var(--color-pine-soft);
+    border-color: transparent;
+    color: var(--color-pine);
+  }
+  .tag-amber {
+    background: var(--color-amber-soft);
+    border-color: transparent;
+    color: var(--color-amber);
+  }
+  .tag-danger {
+    background: var(--color-danger-soft);
+    border-color: transparent;
+    color: var(--color-danger);
+  }
+
+  /* Input */
+  .input {
+    width: 100%;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.8rem;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.9rem;
+    color: var(--color-ink);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .input::placeholder {
+    color: var(--color-faint);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 4px var(--color-accent-ring);
+  }
+
+  /* Eyebrow / section label */
+  .eyebrow {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  /* Motion */
+  .fade-up {
+    animation: fade-up 0.5s var(--ease-out-quart) both;
+  }
+  .fade-in {
+    animation: fade-in 0.4s ease both;
+  }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-paper-2);
+    border-radius: 0.6rem;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.65),
+      transparent
+    );
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Divider */
+  .hr {
+    height: 1px;
+    background: var(--color-line);
+    border: 0;
+  }
+}
+
+/* Soft, premium focus ring everywhere */
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

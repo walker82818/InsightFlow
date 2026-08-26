@@ -13,6 +13,15 @@ export interface DatasetColumn {
   stats: Record<string, unknown>;
 }
 
+export interface DbInfo {
+  db_type: string;
+  host?: string | null;
+  port?: number | null;
+  database?: string | null;
+  schema?: string | null;
+  table: string;
+}
+
 export interface DatasetSummary {
   id: string;
   name: string;
@@ -24,6 +33,8 @@ export interface DatasetSummary {
   status: string;
   created_at: string;
   columns: DatasetColumn[];
+  source_type?: string;
+  db_info?: DbInfo | null;
 }
 
 export interface DatasetProfile {
