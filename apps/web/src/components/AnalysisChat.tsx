@@ -16,6 +16,7 @@ import type {
 } from "@/types/analysis";
 import AnalysisReportView from "@/components/AnalysisReport";
 import AgentTrace from "@/components/AgentTrace";
+import Markdown from "@/components/Markdown";
 
 type Tab = "chat" | "report" | "trace";
 type Status = "idle" | "running" | "completed" | "error";
@@ -504,7 +505,17 @@ function metaFor(type: AnalysisEvent["type"]): {
 
 export function EventCard({ event }: { event: AnalysisEvent }) {
   const meta = metaFor(event.type);
-  const body = formatEvent(event);
+
+  // Conversational / prose events render as markdown; structured & data
+  // events (tool calls, errors, status) stay as plain monospace text.
+  const md =
+    event.type === "message"
+      ? event.content ?? ""
+      : event.type === "agent_end"
+      ? event.answer ?? event.content ?? ""
+      : event.type === "agent_activity"
+      ? event.content ?? ""
+      : null;
 
   return (
     <div className={`fade-up rounded-2xl border p-4 ${meta.cls}`}>
@@ -513,9 +524,13 @@ export function EventCard({ event }: { event: AnalysisEvent }) {
         <span className="text-xs font-semibold text-ink-soft">{meta.label}</span>
         <span className="tag !py-0.5 !text-[11px]">{event.type}</span>
       </div>
-      <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
-        {body}
-      </div>
+      {md !== null ? (
+        <Markdown content={md} className="text-sm leading-relaxed text-ink-soft" />
+      ) : (
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
+          {formatEvent(event)}
+        </div>
+      )}
     </div>
   );
 }

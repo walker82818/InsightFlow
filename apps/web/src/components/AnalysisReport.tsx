@@ -2,6 +2,8 @@
 
 import type { AnalysisReport, ChartSpec, ReportEvidence } from "@/types/analysis";
 import ChartRenderer from "@/components/ChartRenderer";
+import Markdown from "@/components/Markdown";
+import CodeBlock from "@/components/CodeBlock";
 
 function SectionTitle({
   index,
@@ -128,9 +130,9 @@ export default function AnalysisReportView({ report }: { report: AnalysisReport 
       {report.executive_summary && (
         <section className="fade-up">
           <SectionTitle>概述</SectionTitle>
-          <p className="whitespace-pre-wrap border-l-2 border-accent pl-4 text-[15px] font-medium leading-relaxed text-ink">
-            {report.executive_summary}
-          </p>
+          <div className="border-l-2 border-accent pl-4">
+            <Markdown content={report.executive_summary} className="!text-[15px] font-medium leading-relaxed text-ink" />
+          </div>
         </section>
       )}
 
@@ -145,7 +147,9 @@ export default function AnalysisReportView({ report }: { report: AnalysisReport 
                   <span className="mt-0.5 font-display text-lg font-bold text-accent">
                     {String(i + 1).padStart(2, "0")}
                   </span>
-                  <p className="text-sm leading-relaxed text-ink-soft">{f}</p>
+                  <div className="flex-1 text-sm leading-relaxed text-ink-soft">
+                    <Markdown content={f} />
+                  </div>
                 </div>
               </div>
             ))}
@@ -178,12 +182,14 @@ export default function AnalysisReportView({ report }: { report: AnalysisReport 
             {evidence.map((e: ReportEvidence, i) => (
               <div key={i} className="tile p-4">
                 <div className="text-sm font-medium text-ink">
-                  {e.title ?? "证据"}
+                  {e.title ? <Markdown content={e.title} /> : "证据"}
                 </div>
                 {e.sql && (
-                  <pre className="mt-2 overflow-auto rounded-lg bg-ink px-3 py-2 text-xs leading-relaxed text-paper/90">
-                    {e.sql}
-                  </pre>
+                  <CodeBlock
+                    code={e.sql}
+                    language="sql"
+                    className="mt-2 overflow-auto rounded-lg bg-ink px-3 py-2 text-xs leading-relaxed text-paper/90"
+                  />
                 )}
                 <EvidenceTable columns={e.columns} rows={e.rows} />
               </div>
@@ -200,7 +206,9 @@ export default function AnalysisReportView({ report }: { report: AnalysisReport 
             {recs.map((r, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-ink-soft">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-pine" />
-                <span>{r}</span>
+                <div className="flex-1">
+                  <Markdown content={r} />
+                </div>
               </li>
             ))}
           </ul>
@@ -215,7 +223,9 @@ export default function AnalysisReportView({ report }: { report: AnalysisReport 
             {limits.map((l, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-muted">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-faint" />
-                <span>{l}</span>
+                <div className="flex-1">
+                  <Markdown content={l} />
+                </div>
               </li>
             ))}
           </ul>

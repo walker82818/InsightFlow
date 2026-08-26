@@ -296,3 +296,131 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* Markdown prose (reports, agent answers) */
+.md {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--color-ink-soft);
+  word-break: break-word;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-family: var(--font-display);
+  color: var(--color-ink);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 1.1em 0 0.5em;
+  line-height: 1.3;
+}
+.md h1 {
+  font-size: 1.3rem;
+}
+.md h2 {
+  font-size: 1.15rem;
+}
+.md h3 {
+  font-size: 1.02rem;
+}
+.md h4 {
+  font-size: 0.95rem;
+}
+.md p {
+  margin: 0.6em 0;
+}
+.md ul,
+.md ol {
+  margin: 0.6em 0;
+  padding-left: 1.4em;
+}
+.md ul {
+  list-style: disc;
+}
+.md ol {
+  list-style: decimal;
+}
+.md li {
+  margin: 0.3em 0;
+}
+.md li::marker {
+  color: var(--color-accent);
+}
+.md a {
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md strong {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+.md blockquote {
+  margin: 0.8em 0;
+  padding: 0.4em 1em;
+  border-left: 3px solid var(--color-line-strong);
+  color: var(--color-muted);
+  background: var(--color-surface-2);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-paper-2);
+  border: 1px solid var(--color-line);
+  border-radius: 0.35rem;
+  padding: 0.1em 0.35em;
+}
+.md pre {
+  margin: 0.8em 0;
+  padding: 0.9em 1em;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  border-radius: 0.7rem;
+  overflow: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+.md pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 0.8em 0;
+}
+.md th,
+.md td {
+  border: 1px solid var(--color-line);
+  padding: 0.5em 0.7em;
+  text-align: left;
+}
+.md thead th {
+  background: var(--color-surface-2);
+  color: var(--color-ink-soft);
+  font-weight: 600;
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  margin: 1.2em 0;
+}
+
+/* highlight.js: drop the theme's own background/foreground so tokens adapt
+   to our containers (dark code blocks in reports, light prose elsewhere). */
+.hljs {
+  background: transparent !important;
+  color: inherit;
+}
