@@ -104,6 +104,236 @@ export async function checkHealth(): Promise<{ status: string }> {
   return res.json();
 }
 
+// ---- InsightFlow 2.0: data profile & semantic layer ----
+
+export interface DatasetProfile2 {
+  dataset_id: string;
+  quality_score: number;
+  issues: Array<{
+    column: string;
+    category: string;
+    severity: "high" | "medium" | "low";
+    message: string;
+    suggestion?: string;
+  }>;
+  schema: {
+    roles: Record<string, string>;
+    relations: Array<{
+      left_col: string;
+      right_col: string;
+      relation_type: string;
+      strength: number;
+    }>;
+    columns: Array<{ name: string; type: string }>;
+  };
+  anomalies: Array<{
+    column: string;
+    kind: string;
+    severity: string;
+    count?: number;
+    value?: unknown;
+    message: string;
+  }>;
+  generated_at?: string | null;
+}
+
+export interface SemanticLayer {
+  dataset_id: string;
+  metrics: Array<{
+    id: string;
+    name: string;
+    column: string;
+    aggregation: string;
+    sql_expr: string;
+    unit: string;
+    description: string;
+    status: "auto" | "confirmed";
+  }>;
+  dimensions: Array<{
+    id: string;
+    name: string;
+    column: string;
+    is_time: boolean;
+    granularity: string;
+    description: string;
+    status: "auto" | "confirmed";
+  }>;
+}
+
+export async function getDatasetProfile2(id: string): Promise<DatasetProfile2> {
+  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}/profile`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
+export async function getDatasetSemantics(id: string): Promise<SemanticLayer> {
+  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}/semantics`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
+export async function confirmSemantic(
+  datasetId: string,
+  itemType: "metric" | "dimension",
+  itemId: string,
+): Promise<{ id: string; type: string; status: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/v1/datasets/${datasetId}/semantics/${itemType}/${itemId}/confirm`,
+    { method: "PATCH" },
+  );
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
+export interface Insight2 {
+  id: string;
+  dataset_id: string;
+  kind: string;
+  title: string;
+  conclusion: string;
+  metric: string;
+  dimensions: string[];
+  evidence: {
+    claim?: string;
+    result?: string;
+    confidence?: number;
+    [k: string]: unknown;
+  };
+  confidence: number;
+  severity: "high" | "medium" | "low";
+  sql: string;
+  created_at?: string | null;
+}
+
+export interface InsightsResponse {
+  dataset_id: string;
+  insights: Insight2[];
+}
+
+export async function getDatasetInsights(id: string): Promise<InsightsResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}/insights`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
+// —— 2.0 evidence chain & root cause ——
+
+/** Shape of a persisted evidence tool result (rows + row_count + columns). */
+export interface EvidenceResult {
+  rows?: unknown[][];
+  row_count?: number;
+  columns?: string[];
+  [k: string]: unknown;
+}
+
+export interface EvidenceRow {
+  id: string;
+  dataset_id: string;
+  analysis_id: string | null;
+  claim: string;
+  metric: string;
+  dimensions: string[];
+  source: "sql" | "python";
+  sql: string;
+  result: EvidenceResult;
+  confidence: number;
+  created_at?: string | null;
+}
+
+export interface EvidencesResponse {
+  analysis_id: string;
+  evidences: EvidenceRow[];
+}
+
+export interface RootCausePayload {
+  id?: string;
+  dataset_id?: string;
+  question: string;
+  change: {
+    metric: string;
+    delta: number;
+    base_value: number;
+    current_value: number;
+    significant: boolean;
+    reason: string;
+  };
+  contributions: {
+    factor: string;
+    contribution: number;
+    contribution_pct: number;
+    metric: string;
+    period: string;
+  }[];
+  factors: string[];
+  hypotheses: {
+    hypothesis: string;
+    status: "已证实" | "待验证";
+    evidence_ids?: string[];
+  }[];
+  conclusion: string;
+  confidence: number;
+  created_at?: string | null;
+}
+
+export interface RootCauseResponse {
+  analysis_id: string;
+  root_cause: RootCausePayload | null;
+}
+
+export async function getAnalysisEvidences(
+  id: string
+): Promise<EvidencesResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/evidences`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
+export async function getAnalysisRootCause(
+  id: string
+): Promise<RootCauseResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/root-cause`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
+export interface EvidenceGraphNode {
+  id: string;
+  claim: string;
+  metric: string;
+  source: string;
+  sql: string;
+  confidence: number;
+  parent_id: string | null;
+  level: number;
+  result: EvidenceResult;
+}
+
+export interface EvidenceGraphResponse {
+  analysis_id: string;
+  nodes: EvidenceGraphNode[];
+  edges: { from: string; to: string }[];
+}
+
+export async function getEvidenceGraph(
+  id: string
+): Promise<EvidenceGraphResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/evidence-graph`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return parseError(res);
+  return res.json();
+}
+
 export async function createAnalysis(
   datasetIds: string[],
   query: string,
@@ -228,19 +458,36 @@ export async function createReport(id: string): Promise<AnalysisReport> {
   return body.content;
 }
 
-/** Open the standalone HTML report in a new tab (inline) or trigger a download. */
-export function reportExportUrl(id: string, inline = false): string {
-  return `${API_BASE}/api/v1/analyses/${id}/report/export${
-    inline ? "?inline=true" : ""
-  }`;
+export type ReportExportFormat = "html" | "markdown";
+
+/** Open the standalone report in a new tab (inline) or trigger a download. */
+export function reportExportUrl(
+  id: string,
+  inline = false,
+  format: ReportExportFormat = "html",
+): string {
+  const params = new URLSearchParams();
+  if (format && format !== "html") params.set("format", format);
+  if (inline) params.set("inline", "true");
+  const qs = params.toString();
+  return `${API_BASE}/api/v1/analyses/${id}/report/export${qs ? `?${qs}` : ""}`;
 }
 
-/** Trigger a browser download of the standalone HTML report. */
-export function downloadReport(id: string, filename = "report.html"): void {
+/** Trigger a browser download of the standalone report (HTML or Markdown). */
+export function downloadReport(
+  id: string,
+  filename = "report.html",
+  format: ReportExportFormat = "html",
+): void {
   const a = document.createElement("a");
-  a.href = reportExportUrl(id, false);
+  a.href = reportExportUrl(id, false, format);
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+/** Download the evidence-driven report as Markdown. */
+export function downloadReportMarkdown(id: string): void {
+  downloadReport(id, "insightflow-report.md", "markdown");
 }

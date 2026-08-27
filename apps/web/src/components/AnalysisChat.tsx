@@ -7,6 +7,7 @@ import {
   getReport,
   createReport,
   downloadReport,
+  downloadReportMarkdown,
   reportExportUrl,
 } from "@/lib/api";
 import type {
@@ -16,6 +17,7 @@ import type {
 } from "@/types/analysis";
 import AnalysisReportView from "@/components/AnalysisReport";
 import AgentTrace from "@/components/AgentTrace";
+import EvidencePanel from "@/components/EvidencePanel";
 import Markdown from "@/components/Markdown";
 
 type Tab = "chat" | "report" | "trace";
@@ -305,6 +307,11 @@ export default function AnalysisChat({
                   Agent 正在思考…
                 </div>
               )}
+              {status === "completed" && analysisId && (
+                <div className="pt-1">
+                  <EvidencePanel analysisId={analysisId} />
+                </div>
+              )}
             </div>
 
             {/* Composer */}
@@ -348,24 +355,36 @@ export default function AnalysisChat({
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="eyebrow">AI 生成的分析报告</div>
-                  <div className="flex gap-2">
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => downloadReport(analysisId!, "insightflow-report.html")}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 3v12m-4-4 4 4 4-4M5 21h14" />
-                      </svg>
-                      下载 HTML
-                    </button>
+                  <div className="flex flex-wrap gap-2">
                     <a
                       className="btn btn-quiet"
                       href={reportExportUrl(analysisId!, true)}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      新窗口查看
+                      打印 / PDF
                     </a>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => downloadReport(analysisId!, "insightflow-report.html")}
+                      title="下载证据驱动报告（HTML）"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 3v12m-4-4 4 4 4-4M5 21h14" />
+                      </svg>
+                      下载 HTML
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => downloadReportMarkdown(analysisId!)}
+                      title="下载证据驱动报告（Markdown，可导入 Notion / Word）"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+                        <path d="M14 2v6h6" />
+                      </svg>
+                      下载 Markdown
+                    </button>
                   </div>
                 </div>
                 <AnalysisReportView report={report} />

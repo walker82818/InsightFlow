@@ -14,6 +14,9 @@ class AgentState(TypedDict, total=False):
     user_query: str
     datasets: list[dict]  # Phase 9 多数据集: [{id,name,storage_path,file_type,table_name,schema_text}]
     schema_text: str
+    # 语义层已确认口径（Design §6.1 规则#4 供 reviewer 做语义对齐提示）。
+    semantic_metrics: list[str]
+    semantic_dimensions: list[str]
 
     plan: list[dict]
     # ReAct 内循环的完整对话（含工具结果），供 reviewer 回边时「续跑」而非重建。

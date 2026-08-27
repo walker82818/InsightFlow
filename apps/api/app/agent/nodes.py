@@ -539,13 +539,53 @@ async def visualization_node(state: AgentState) -> dict[str, Any]:
 
 
 async def reviewer_node(state: AgentState) -> dict[str, Any]:
-    client = get_llm_client(ModelSize.large)
+    from app.services.evidence_check import run_rule_checks
+
     answer = (state.get("answer", "") or "").strip()
+    sql_results = state.get("sql_results", []) or []
+    python_results = state.get("python_results", []) or []
+
+    # —— Reviewer 2.0 · 通道 1：确定性规则校验（硬闸门）——
+    # 规则通道不依赖 LLM，可复现。任一硬规则失败即标记未通过，无论 LLM 如何表态，
+    # 避免"自信但无依据"的结论蒙混过关。第 4 条语义对齐为 advisory「提示」。
+    rule_checks, rules_passed = run_rule_checks(
+        answer,
+        sql_results,
+        python_results,
+        semantic_metrics=state.get("semantic_metrics", []),
+    )
+
+    # 结论为空 → 硬性未通过（无证据可审查）。
+    if not answer:
+        return {
+            "review_result": {
+                "passed": False,
+                "comment": "分析结论为空，无证据可审查",
+                "checks": rule_checks,
+                "channels": {"rules": False, "llm": False},
+            },
+            "retries": (state.get("retries", 0) or 0) + 1,
+            "events": [_ev("agent_activity", agent="reviewer", content="审查未通过：分析结论为空")],
+        }
+
+    if not rules_passed:
+        failures = [c["detail"] for c in rule_checks if not c["passed"]]
+        comment = "规则校验未通过：" + "；".join(failures)
+        return {
+            "review_result": {
+                "passed": False,
+                "comment": comment,
+                "checks": rule_checks,
+                "channels": {"rules": False, "llm": False},
+            },
+            "retries": (state.get("retries", 0) or 0) + 1,
+            "events": [_ev("agent_activity", agent="reviewer", content=f"审查未通过：{comment}")],
+        }
+
+    # —— Reviewer 2.0 · 通道 2：LLM 语义校验（规则通道已通过后再执行）——
+    client = get_llm_client(ModelSize.large)
     evidence = json.dumps(
-        {
-            "sql": state.get("sql_results", [])[:5],
-            "python": state.get("python_results", [])[:5],
-        },
+        {"sql": sql_results[:5], "python": python_results[:5]},
         ensure_ascii=False,
     )[:2400]
     messages = [
@@ -569,6 +609,8 @@ async def reviewer_node(state: AgentState) -> dict[str, Any]:
             "review_result": {
                 "passed": False,
                 "comment": f"审查器调用失败，保守标记未通过以触发复核: {exc}",
+                "checks": rule_checks,
+                "channels": {"rules": True, "llm": False},
             },
             "retries": (state.get("retries", 0) or 0) + 1,
             "events": [_ev("agent_activity", agent="reviewer", content=f"审查器异常，标记未通过: {exc}")],
@@ -582,11 +624,6 @@ async def reviewer_node(state: AgentState) -> dict[str, Any]:
     else:
         comment = resp.content or ""
 
-    # 硬守卫：结论为空却声称完成 → 一律未通过，避免「无结论但通过」的弱放行。
-    if not answer:
-        passed = False
-        comment = (comment + "；" if comment else "") + "分析结论为空，无证据可审查"
-
     # 仅在未通过（触发重跑）时累计重试次数
     retries = (state.get("retries", 0) or 0) + (0 if passed else 1)
     events = [
@@ -597,7 +634,12 @@ async def reviewer_node(state: AgentState) -> dict[str, Any]:
         )
     ]
     return {
-        "review_result": {"passed": passed, "comment": comment},
+        "review_result": {
+            "passed": passed,
+            "comment": comment,
+            "checks": rule_checks,
+            "channels": {"rules": True, "llm": passed},
+        },
         "retries": retries,
         "prompt_tokens": resp.prompt_tokens,
         "completion_tokens": resp.completion_tokens,

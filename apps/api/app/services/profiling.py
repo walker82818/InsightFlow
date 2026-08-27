@@ -159,8 +159,13 @@ def profile_dataframe(df: pd.DataFrame) -> dict[str, Any]:
 
 
 def profile_bytes(data: bytes, file_type: str) -> dict[str, Any]:
-    df = _read_dataframe(data, file_type)
+    df = read_dataframe(data, file_type)
     return profile_dataframe(df)
+
+
+def read_dataframe(data: bytes, file_type: str) -> pd.DataFrame:
+    """Parse uploaded bytes into a DataFrame (public wrapper for profiling reuse)."""
+    return _read_dataframe(data, file_type)
 
 
 def _preview(df: pd.DataFrame) -> list[dict[str, Any]]:

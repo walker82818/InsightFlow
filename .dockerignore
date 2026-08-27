@@ -1,0 +1,43 @@
+# Git / IDE
+.git
+.gitignore
+*.codebuddy*
+.idea
+.vscode
+
+# Node
+**/node_modules
+**/.next
+**/out
+**/dist
+**/build
+apps/web/.env.local
+apps/web/dev.log
+
+# Python
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+.pytest_cache
+.mypy_cache
+
+# Runtime data (DuckDB files, uploads, sqlite) — keep out of the image.
+data
+**/data
+*.duckdb
+*.db
+*.sqlite*
+
+# Logs / temp
+*.log
+tmp
+_temp*
+
+# Docs / plans / sandbox (built separately)
+docs
+sandbox
+
+# OS
+.DS_Store
+Thumbs.db

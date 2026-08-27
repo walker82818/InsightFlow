@@ -1,0 +1,35 @@
+# Python virtualenv — huge, never ship into the image.
+.venv
+venv
+
+# Bytecode / caches
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+*.egg-info
+
+# Runtime data (DuckDB file + uploads) — lives in a named volume instead.
+data
+**/data
+*.duckdb
+*.db
+*.sqlite*
+
+# Local runtime logs / scratch files
+*.log
+uvicorn.out
+backend.err
+_*.py
+_*.txt
+_*.csv
+e2e_*
+
+# Git / IDE
+.git
+.gitignore
+.idea
+.vscode
+
+# Node (this package is Python-only, but keep stray files out)
+node_modules

@@ -184,6 +184,63 @@ async def get_analysis_trace(
     return trace
 
 
+@router.get("/{analysis_id}/evidences")
+async def get_analysis_evidences(
+    analysis_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Return the persisted evidence chain for an analysis (2.0 evidence core)."""
+    from app.services.evidence import load_evidences
+
+    evidences = await load_evidences(session, analysis_id=analysis_id)
+    return {"analysis_id": analysis_id, "evidences": evidences}
+
+
+@router.get("/{analysis_id}/evidence-graph")
+async def get_analysis_evidence_graph(
+    analysis_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Return the multi-hop evidence DAG for an analysis (P1 evidence graph)."""
+    from app.services.evidence import load_evidence_graph
+
+    graph = await load_evidence_graph(session, analysis_id=analysis_id)
+    return {"analysis_id": analysis_id, **graph}
+
+
+@router.get("/{analysis_id}/root-cause")
+async def get_analysis_root_cause(
+    analysis_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Return the persisted root-cause analysis for an analysis, if any."""
+    from sqlalchemy import select as _select
+    from app.models.root_cause import RootCause
+
+    row = (
+        await session.execute(
+            _select(RootCause).where(RootCause.analysis_id == analysis_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return {"analysis_id": analysis_id, "root_cause": None}
+    return {
+        "analysis_id": analysis_id,
+        "root_cause": {
+            "id": row.id,
+            "dataset_id": row.dataset_id,
+            "question": row.question,
+            "change": json.loads(row.change or "{}"),
+            "contributions": json.loads(row.contributions or "[]"),
+            "factors": json.loads(row.factors or "[]"),
+            "hypotheses": json.loads(row.hypotheses or "[]"),
+            "conclusion": row.conclusion,
+            "confidence": row.confidence,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Phase 7: report generation / export
 # ---------------------------------------------------------------------------
@@ -276,15 +333,52 @@ async def get_report(
 async def export_report(
     analysis_id: str,
     session: AsyncSession = Depends(get_session),
+    format: str = Query("html", description="导出格式：html | markdown"),
     inline: bool = Query(False, description="true 在浏览器内联打开，否则作为附件下载"),
-) -> HTMLResponse:
-    """Export the report as a standalone, self-contained HTML document."""
+):
+    """Export the report as a standalone deliverable.
+
+    Formats:
+      - ``html``     : self-contained HTML (open in browser / print to PDF).
+      - ``markdown`` : portable Markdown for Notion / Word / Obsidian.
+    """
+    from fastapi.responses import PlainTextResponse
+
+    from app.services.eval_replay import evaluate_analysis
+    from app.services.evidence import load_evidence_graph, load_evidences
+    from app.services.report_export import (
+        build_export_data,
+        render_html_export,
+        render_markdown_export,
+    )
+
     report = await report_repo.get_report(session, analysis_id)
     if report is None:
         raise HTTPException(status_code=404, detail="report not found (generate it first)")
-    html_doc = report.html or render_html_report(
-        report.content_json, "", analysis_id
-    )
+
+    # report.content_json may be None/legacy; normalize to dict.
+    content = report.content_json if isinstance(report.content_json, dict) else {}
+
+    if format == "markdown":
+        data = await build_export_data(session, analysis_id, content)
+        md = render_markdown_export(data)
+        disposition = "inline" if inline else "attachment"
+        filename = f"report_{analysis_id}.md"
+        return PlainTextResponse(
+            content=md,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+        )
+
+    # Default: html (standalone, print-ready, evidence-driven).
+    html_doc = report.html
+    try:
+        data = await build_export_data(session, analysis_id, content)
+        html_doc = render_html_export(data)
+    except Exception:  # noqa: BLE001 - fall back to the stored HTML on any error
+        if not html_doc:
+            html_doc = render_html_report(content, "", analysis_id)
+
     disposition = "inline" if inline else "attachment"
     filename = f"report_{analysis_id}.html"
     return HTMLResponse(

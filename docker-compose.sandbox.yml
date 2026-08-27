@@ -1,0 +1,24 @@
+# =============================================================================
+# InsightFlow — code-sandbox overlay.
+#
+# The API runs LLM-generated Python inside an isolated `insightflow-sandbox`
+# container. To enable:
+#
+#   1. Build the sandbox image (has its own Dockerfile in /sandbox):
+#        docker build -t insightflow-sandbox ./sandbox
+#   2. Start the stack with this overlay so `api` gets the Docker socket:
+#        docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up -d --build
+#
+# Security: mounting the Docker socket grants the API process root-level control
+# over the host Docker daemon. Only use in an environment you fully trust.
+# =============================================================================
+
+services:
+  api:
+    profiles: []                 # ensure api runs in the default set here
+    volumes:
+      - insightflow_data:/app/data
+      # Docker socket so the API can launch the sandbox container.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      SANDBOX_ALLOW_LOCAL_FALLBACK: "false"

@@ -7,6 +7,9 @@ import AnalysisChat from "@/components/AnalysisChat";
 import AnalysisHistory from "@/components/AnalysisHistory";
 import HistoryDetail, { type HistoryPayload } from "@/components/HistoryDetail";
 import DatasetStructureView from "@/components/DatasetStructureView";
+import DataQualityPanel from "@/components/DataQualityPanel";
+import SemanticLayerPanel from "@/components/SemanticLayerPanel";
+import InsightsPanel from "@/components/InsightsPanel";
 
 export default function DatasetPage({
   params,
@@ -111,6 +114,9 @@ export default function DatasetPage({
         </div>
         <aside className="space-y-6">
           <DatasetStructureView dataset={dataset} />
+          <DataQualityPanel datasetId={id} />
+          <InsightsPanel datasetId={id} />
+          <SemanticLayerPanel datasetId={id} />
           <AnalysisHistory
             datasetId={id}
             refreshSignal={historySignal}

@@ -5,6 +5,12 @@ import type { NextConfig } from "next";
 const BACKEND = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
+  // Production container build (see apps/web/Dockerfile). Standalone bundles the
+  // server + its minimal node_modules so the image can be tiny and start fast.
+  output: "standalone",
+  // monorepo root so Next's standalone tracing can follow the pnpm workspace
+  // deps (@insightflow/*) when building the Docker image.
+  outputFileTracingRoot: path.join(__dirname, "..", ".."),
   transpilePackages: ["@insightflow/chart-schema", "@insightflow/shared-types"],
   // apps/web ships its own .git, so point Turbopack's resolution root at the
   // monorepo root where pnpm hoists node_modules. Keeps the workspace working

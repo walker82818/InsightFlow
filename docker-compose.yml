@@ -1,0 +1,104 @@
+# =============================================================================
+# InsightFlow — one-command deployment.
+#
+#   cp .env.example .env        # fill in LLM_API_KEY (and anything else)
+#   docker compose up -d --build
+#
+# Services: db (PostgreSQL) · api (FastAPI) · web (Next.js standalone)
+# Optional object storage: set STORAGE_BACKEND=minio and `--profile minio`.
+# Optional code sandbox:   see docker-compose.sandbox.yml (keeps api slim here).
+# =============================================================================
+
+x-api-common: &api-common
+  build:
+    context: ./apps/api
+  environment: &api-env
+    # DB connection uses the compose `db` service hostname.
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-insightflow}:${POSTGRES_PASSWORD:-insightflow}@db:5432/${POSTGRES_DB:-insightflow}
+    LLM_PROVIDER: ${LLM_PROVIDER:-deepseek}
+    LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+    LLM_API_KEY: ${LLM_API_KEY:-}
+    LLM_SMALL_MODEL: ${LLM_SMALL_MODEL:-deepseek-chat}
+    LLM_LARGE_MODEL: ${LLM_LARGE_MODEL:-deepseek-reasoner}
+    STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+    MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    MINIO_BUCKET: ${MINIO_BUCKET:-insightflow}
+    SANDBOX_ALLOW_LOCAL_FALLBACK: ${SANDBOX_ALLOW_LOCAL_FALLBACK:-false}
+    SANDBOX_DOCKER_IMAGE: insightflow-sandbox:latest
+    LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+    LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+    LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
+  volumes:
+    # DuckDB file + local uploads persist here across restarts.
+    - insightflow_data:/app/data
+  depends_on:
+    db:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 20s
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-insightflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-insightflow}
+      POSTGRES_DB: ${POSTGRES_DB:-insightflow}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-insightflow} -d ${POSTGRES_DB:-insightflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    <<: *api-common
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked into the standalone server at build time.
+        BACKEND_URL: http://api:8000
+    environment:
+      # Keep runtime env consistent with the baked proxy target.
+      BACKEND_URL: http://api:8000
+      # Leave empty so the browser talks same-origin via the Next proxy.
+      NEXT_PUBLIC_API_URL: ""
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    profiles: ["minio"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  insightflow_data:
+  minio_data:

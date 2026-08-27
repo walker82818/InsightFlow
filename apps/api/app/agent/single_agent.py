@@ -184,10 +184,47 @@ async def run_analysis(
     thread_id = str(uuid4())
     config = {"configurable": {"thread_id": thread_id}}
 
+    # 语义层已确认口径（Design §6.1 规则#4）：供 reviewer 做语义对齐提示。
+    try:
+        from app.models.semantic import Dimension as _Dim, Metric as _Met
+
+        dataset_ids = [d["id"] for d in datasets]
+        async with AsyncSessionLocal() as _db:
+            confirmed_metrics = (
+                (
+                    await _db.execute(
+                        select(_Met.name).where(
+                            _Met.dataset_id.in_(dataset_ids),
+                            _Met.status == "confirmed",
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            confirmed_dims = (
+                (
+                    await _db.execute(
+                        select(_Dim.name).where(
+                            _Dim.dataset_id.in_(dataset_ids),
+                            _Dim.status == "confirmed",
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("load confirmed semantics failed")
+        confirmed_metrics = []
+        confirmed_dims = []
+
     input_state = {
         "user_query": query,
         "datasets": datasets,
         "schema_text": schema_text,
+        "semantic_metrics": list(confirmed_metrics),
+        "semantic_dimensions": list(confirmed_dims),
     }
 
     # Create the run row up-front (status=running) so /trace is queryable early.
@@ -299,6 +336,63 @@ async def run_analysis(
         latency_ms = int((finished - started).total_seconds() * 1000)
         cost = _estimate_cost(pt, ct)
         steps, tool_calls = _build_trace(events)
+
+        # 2.0 evidence chain: persist successful tool results so conclusions are
+        # backed by an auditable chain (Reviewer 2.0 rule channel re-checks this).
+        primary_dataset_id = datasets[0]["id"]
+        try:
+            from app.services.evidence import persist_analysis_evidences
+
+            async with AsyncSessionLocal() as db:
+                await persist_analysis_evidences(
+                    db,
+                    analysis_id=analysis_id,
+                    dataset_id=primary_dataset_id,
+                    sql_results=values.get("sql_results", []) or [],
+                    python_results=values.get("python_results", []) or [],
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("persist_analysis_evidences failed for %s", analysis_id)
+
+        # 2.0 root cause: for "why" questions, run deterministic contribution
+        # decomposition and persist the subgraph output.
+        try:
+            from app.services.root_cause import is_why_question, persist_root_cause
+            from app.models.dataset_profile import DatasetProfile
+            from app.services.profiling import read_dataframe
+            from app.services.storage import build_storage
+
+            if is_why_question(query):
+                async with AsyncSessionLocal() as db:
+                    prof = (
+                        await db.execute(
+                            select(DatasetProfile).where(
+                                DatasetProfile.dataset_id == primary_dataset_id
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if prof is not None and prof.schema_json:
+                        # Reload the dataset DataFrame from storage for the
+                        # deterministic contribution decomposition.
+                        raw = await build_storage().load(
+                            datasets[0]["storage_path"]
+                        )
+                        rc_df = read_dataframe(
+                            raw, datasets[0]["file_type"]
+                        )
+                        payload = await persist_root_cause(
+                            db,
+                            analysis_id=analysis_id,
+                            dataset_id=primary_dataset_id,
+                            question=query,
+                            df=rc_df,
+                            schema=json.loads(prof.schema_json),
+                            min_delta=settings.root_cause_min_delta,
+                        )
+                        if payload:
+                            result["root_cause"] = payload
+        except Exception:  # noqa: BLE001
+            logger.exception("root_cause failed for %s", analysis_id)
 
         async with AsyncSessionLocal() as db:
             analysis = await db.get(Analysis, analysis_id)

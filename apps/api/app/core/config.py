@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     agent_max_steps: int = 6  # max ReAct steps inside the analysis node
     agent_max_retries: int = 2  # Reviewer 触发重分析（ReAct 内循环）的最大轮次
     max_chart_rows: int = 200  # rows fed into a generated ChartSpec
+    # 根因分析「变化显著性门槛」（Design D5）：环比变化幅度低于此值即拒答，
+    # 避免对无意义波动强行编造根因。
+    root_cause_min_delta: float = 0.05
     # 全局分析墙钟超时（秒）：兜底防止 LLM 慢/死循环导致 SSE 无限挂起。
     # 单个工具调用另有 sandbox_timeout 限制；此项覆盖整条 pipeline。
     agent_total_timeout: int = 180
