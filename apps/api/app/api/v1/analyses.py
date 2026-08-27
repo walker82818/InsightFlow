@@ -19,10 +19,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import DatasetRef, run_analysis
-from app.core.config import settings
+from app.api.v1.deps import get_current_user
 from app.db.session import get_session
 from app.models.analysis import Analysis
 from app.models.dataset import Dataset, DatasetColumn
+from app.models.user import User
 from app.repositories import analysis as repo
 from app.repositories import report as report_repo
 from app.schemas.analysis import AnalysisCreate, AnalysisOut, AnalysisSummaryOut
@@ -57,6 +58,7 @@ def _schema_text(columns: list[DatasetColumn]) -> str:
 async def create_analysis(
     payload: AnalysisCreate,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ) -> AnalysisOut:
     ids = payload.dataset_ids or ([payload.dataset_id] if payload.dataset_id else [])
     if not ids:
@@ -67,7 +69,7 @@ async def create_analysis(
             raise HTTPException(status_code=404, detail=f"dataset not found: {did}")
     row = await repo.create_analysis(
         session,
-        user_id=settings.default_user_id,
+        user_id=user.id,
         dataset_ids=ids,
         query=payload.query,
     )
@@ -77,11 +79,12 @@ async def create_analysis(
 @router.get("", response_model=list[AnalysisSummaryOut])
 async def list_analyses(
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
     dataset_id: str | None = Query(default=None, description="按数据集过滤"),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[AnalysisSummaryOut]:
     rows = await repo.list_analyses(
-        session, settings.default_user_id, limit=limit, dataset_id=dataset_id
+        session, user.id, limit=limit, dataset_id=dataset_id
     )
     return [AnalysisSummaryOut(**repo.to_summary(r)) for r in rows]
 

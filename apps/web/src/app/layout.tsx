@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "highlight.js/styles/github.css";
 import "./globals.css";
+import AuthNav from "@/components/AuthNav";
 
 export const metadata: Metadata = {
   title: "InsightFlow — AI 数据分析与可视化",
@@ -68,6 +69,7 @@ export default function RootLayout({
                 <span className="h-2 w-2 rounded-full bg-pine" />
                 本地服务已连接
               </span>
+              <AuthNav />
             </nav>
           </div>
         </header>

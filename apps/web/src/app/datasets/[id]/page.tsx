@@ -6,23 +6,43 @@ import type { DatasetDetail } from "@/types/dataset";
 import AnalysisChat from "@/components/AnalysisChat";
 import AnalysisHistory from "@/components/AnalysisHistory";
 import HistoryDetail, { type HistoryPayload } from "@/components/HistoryDetail";
-import DatasetStructureView from "@/components/DatasetStructureView";
-import DataQualityPanel from "@/components/DataQualityPanel";
+import DatasetSnapshotBar from "@/components/DatasetSnapshotBar";
 import SemanticLayerPanel from "@/components/SemanticLayerPanel";
 import InsightsPanel from "@/components/InsightsPanel";
 
 export default function DatasetPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ ids?: string }>;
 }) {
   const { id } = use(params);
   const [dataset, setDataset] = useState<DatasetDetail | null>(null);
-  const [seed, setSeed] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [historySignal, setHistorySignal] = useState(0);
   const [history, setHistory] = useState<HistoryPayload | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Extra tables carried in via ?ids=a,b,c — primary `id` is always first.
+  const [extraIds, setExtraIds] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const sp = await searchParams;
+      if (cancelled) return;
+      const list = (sp.ids ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter((x) => x !== id);
+      setExtraIds(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, id]);
+  const datasetIds = [id, ...extraIds];
 
   useEffect(() => {
     let cancelled = false;
@@ -79,26 +99,25 @@ export default function DatasetPage({
           <span className="tag tag-pine shrink-0">就绪</span>
         </div>
 
-        <div className="mt-5 border-t border-line pt-4">
-          <label className="eyebrow">分析侧重（可选）</label>
-          <p className="mt-1 text-xs text-faint">
-            告诉 Agent 你更关心什么，例如「重点关注转化漏斗与留存」。会随每次提问一起发送。
-          </p>
-          <textarea
-            className="input mt-2 min-h-[52px] resize-none"
-            value={seed}
-            onChange={(e) => setSeed(e.target.value)}
-            placeholder="例如：重点分析用户留存与高价值人群特征"
-          />
-        </div>
       </section>
+
+      {/* Data snapshot —— 全宽数据健康概览（质量分 + 统计 + 字段角色 + 可展开明细） */}
+      <DatasetSnapshotBar dataset={dataset} />
 
       {/* Main grid —— 主对话区（左）常驻；历史详情以覆盖层嵌在主对话区内，不改变整体布局 */}
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="relative">
           <AnalysisChat
-            datasetId={id}
-            seed={seed}
+            datasetIds={datasetIds}
+            onAddDataset={(newId) =>
+              setExtraIds((prev) =>
+                prev.includes(newId) ? prev : [...prev, newId]
+              )
+            }
+            onRemoveDataset={(rmId) => {
+              if (rmId === id) return; // keep the primary table anchored
+              setExtraIds((prev) => prev.filter((x) => x !== rmId));
+            }}
             onAnalysisDone={() => setHistorySignal((n) => n + 1)}
           />
           {historyLoading && !history && (
@@ -113,8 +132,6 @@ export default function DatasetPage({
           )}
         </div>
         <aside className="space-y-6">
-          <DatasetStructureView dataset={dataset} />
-          <DataQualityPanel datasetId={id} />
           <InsightsPanel datasetId={id} />
           <SemanticLayerPanel datasetId={id} />
           <AnalysisHistory

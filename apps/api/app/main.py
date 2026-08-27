@@ -11,7 +11,7 @@ from app.api.v1 import api_router
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import engine
-from app.models import Analysis, Dataset, DatasetColumn  # noqa: F401  (register models)
+from app.models import Analysis, Dataset, DatasetColumn, User  # noqa: F401  (register models)
 
 ALLOWED_ORIGINS = [
     "http://localhost:3000",

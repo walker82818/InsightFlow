@@ -28,10 +28,13 @@ const KIND_ICON: Record<string, string> = {
   quality: "◐",
 };
 
+const PREVIEW = 2;
+
 export default function InsightsPanel({ datasetId }: { datasetId: string }) {
   const [data, setData] = useState<InsightsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +80,7 @@ export default function InsightsPanel({ datasetId }: { datasetId: string }) {
   }
 
   const insights = data.insights;
+  const shown = expanded ? insights : insights.slice(0, PREVIEW);
 
   return (
     <div className="card p-4">
@@ -93,49 +97,64 @@ export default function InsightsPanel({ datasetId }: { datasetId: string }) {
           暂未发现可自动沉淀的洞察。
         </div>
       ) : (
-        <div className="mt-3 max-h-[26rem] space-y-2 overflow-auto pr-1">
-          {insights.map((ins) => (
-            <div
-              key={ins.id}
-              className="rounded-xl border border-line bg-surface px-3 py-2.5"
-            >
-              <div className="flex items-start gap-2">
-                <span
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] text-white ${
-                    SEV_DOT[ins.severity] ?? "bg-pine"
-                  }`}
-                  aria-hidden
-                >
-                  {KIND_ICON[ins.kind] ?? "•"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-semibold text-ink">
-                      {ins.title}
-                    </span>
-                    <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted">
-                      {KIND_LABEL[ins.kind] ?? ins.kind}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs leading-relaxed text-muted">
-                    {ins.conclusion}
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-faint">
-                    {ins.evidence?.result && (
-                      <span className="font-mono">
-                        依据：{ins.evidence.result}
+        <>
+          <div
+            className={`mt-3 space-y-2 pr-1 ${
+              expanded ? "max-h-[26rem] overflow-auto" : ""
+            }`}
+          >
+            {shown.map((ins) => (
+              <div
+                key={ins.id}
+                className="rounded-xl border border-line bg-surface px-3 py-2.5"
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] text-white ${
+                      SEV_DOT[ins.severity] ?? "bg-pine"
+                    }`}
+                    aria-hidden
+                  >
+                    {KIND_ICON[ins.kind] ?? "•"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-xs font-semibold text-ink">
+                        {ins.title}
                       </span>
-                    )}
-                    <span>置信 {Math.round(ins.confidence * 100)}%</span>
-                    {ins.dimensions.length > 0 && (
-                      <span>维度：{ins.dimensions.join("、")}</span>
-                    )}
+                      <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted">
+                        {KIND_LABEL[ins.kind] ?? ins.kind}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted">
+                      {ins.conclusion}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-faint">
+                      {ins.evidence?.result && (
+                        <span className="font-mono">
+                          依据：{ins.evidence.result}
+                        </span>
+                      )}
+                      <span>置信 {Math.round(ins.confidence * 100)}%</span>
+                      {ins.dimensions.length > 0 && (
+                        <span>维度：{ins.dimensions.join("、")}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          {insights.length > PREVIEW && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-2 w-full rounded-xl border border-dashed border-line px-3 py-2 text-xs text-muted transition hover:border-accent hover:text-accent-strong"
+            >
+              {expanded ? "收起" : `展开全部 ${insights.length} 条`}
+            </button>
+          )}
+        </>
       )}
     </div>
   );

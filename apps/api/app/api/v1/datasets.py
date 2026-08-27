@@ -18,8 +18,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.deps import get_current_user
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal, get_session
+from app.models.user import User
 from app.repositories import dataset as repo
 from app.schemas.dataset import DBConnectRequest, DatasetDetailOut, DatasetSummaryOut
 from app.services import dataset_insight, dataset_profile, duckdb
@@ -61,6 +63,7 @@ def _validate_upload(file: UploadFile, size: int) -> str:
 async def upload_dataset(
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
     file: UploadFile = File(...),
     name: str | None = Form(default=None),
 ) -> DatasetDetailOut:
@@ -89,7 +92,7 @@ async def upload_dataset(
 
     ds = await repo.create_dataset(
         session,
-        user_id=settings.default_user_id,
+        user_id=user.id,
         name=name or (file.filename or "untitled"),
         file_name=file.filename or "untitled",
         file_type=ext,
@@ -119,6 +122,7 @@ async def upload_dataset(
 async def connect_database(
     payload: DBConnectRequest,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ) -> DatasetDetailOut:
     """直连数据库并把指定表物化为可分析的数据集（Agent 后续可像普通数据集一样查询）。"""
     dataset_id = str(uuid.uuid4())
@@ -149,7 +153,7 @@ async def connect_database(
 
     ds = await repo.create_dataset(
         session,
-        user_id=settings.default_user_id,
+        user_id=user.id,
         name=payload.name,
         file_name=payload.table,
         file_type=payload.db_type,
@@ -180,8 +184,9 @@ async def connect_database(
 @router.get("", response_model=list[DatasetSummaryOut])
 async def list_datasets(
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ) -> list[DatasetSummaryOut]:
-    rows = await repo.list_datasets(session, settings.default_user_id)
+    rows = await repo.list_datasets(session, user.id)
     return [DatasetSummaryOut(**repo._to_summary(d)) for d in rows]
 
 

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # 鉴权（本期跳过）：固定单默认用户
     default_user_id: str = "00000000-0000-0000-0000-000000000001"
 
+    # 认证 (Phase: registration + JWT login). 用于签发/校验 access token.
+    auth_secret_key: str = "insightflow-dev-secret-change-me"
+    auth_algorithm: str = "HS256"
+    auth_token_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     # Python sandbox (Docker)
     sandbox_docker_image: str = "insightflow-sandbox:latest"
     sandbox_timeout: int = 30

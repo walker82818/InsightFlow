@@ -41,7 +41,7 @@ export default function HomePage() {
   return (
     <div className="space-y-12">
       {/* Hero */}
-      <section className="fade-up relative overflow-hidden rounded-[28px] border border-line bg-surface px-7 py-12 sm:px-12 sm:py-16">
+      <section className="relative overflow-hidden rounded-[28px] border border-line bg-surface px-7 py-12 sm:px-12 sm:py-16">
         <div
           aria-hidden
           className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-accent-soft blur-3xl"
@@ -70,9 +70,6 @@ export default function HomePage() {
                 <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
               </svg>
               导入数据集
-            </button>
-            <button className="btn btn-ghost" onClick={() => setConnectOpen(true)}>
-              连接数据库
             </button>
             <span className="text-sm text-muted">
               支持文件上传，或直接连接 PostgreSQL / MySQL / SQLite
@@ -106,7 +103,7 @@ export default function HomePage() {
             d: "一键生成带图表、证据与建议的分析报告，随时回看导出。",
           },
         ].map((s) => (
-          <div key={s.n} className="tile fade-up p-5">
+          <div key={s.n} className="tile p-5">
             <div className="font-display text-2xl font-bold text-accent">{s.n}</div>
             <div className="mt-2 font-display text-base font-semibold text-ink">
               {s.t}
@@ -163,7 +160,7 @@ export default function HomePage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {datasets.map((d) => (
-              <Link key={d.id} href={`/datasets/${d.id}`} className="fade-up">
+              <Link key={d.id} href={`/datasets/${d.id}`}>
                 <DatasetCard dataset={d} />
               </Link>
             ))}

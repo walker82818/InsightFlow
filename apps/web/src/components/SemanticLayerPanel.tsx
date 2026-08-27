@@ -14,6 +14,7 @@ export default function SemanticLayerPanel({
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,45 +134,64 @@ export default function SemanticLayerPanel({
 
   return (
     <div className="card p-4">
-      <div className="eyebrow">语义层</div>
-      <p className="mt-1 text-xs text-faint">
-        Agent 基于这些业务指标与维度理解问题口径。
-      </p>
-
-      <div className="mt-3">
-        <div className="mb-1.5 text-xs text-muted">
-          指标 · {sem.metrics.length}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <div>
+          <div className="eyebrow">语义层</div>
+          <div className="mt-0.5 text-xs text-faint">
+            {sem.metrics.length} 指标 · {sem.dimensions.length} 维度
+          </div>
         </div>
-        <div className="space-y-1.5">
-          {sem.metrics.length === 0 ? (
-            <div className="rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
-              暂无指标
+        <span
+          className={`text-faint transition-transform duration-200 ${
+            open ? "rotate-180" : ""
+          }`}
+          aria-hidden
+        >
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="mt-3">
+            <div className="mb-1.5 text-xs text-muted">
+              指标 · {sem.metrics.length}
             </div>
-          ) : (
-            sem.metrics.map(renderMetric)
-          )}
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="mb-1.5 text-xs text-muted">
-          维度 · {sem.dimensions.length}
-        </div>
-        <div className="space-y-1.5">
-          {sem.dimensions.length === 0 ? (
-            <div className="rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
-              暂无维度
+            <div className="space-y-1.5">
+              {sem.metrics.length === 0 ? (
+                <div className="rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
+                  暂无指标
+                </div>
+              ) : (
+                sem.metrics.map(renderMetric)
+              )}
             </div>
-          ) : (
-            sem.dimensions.map(renderDimension)
-          )}
-        </div>
-      </div>
+          </div>
 
-      {actionMsg && (
-        <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
-          {actionMsg}
-        </div>
+          <div className="mt-3">
+            <div className="mb-1.5 text-xs text-muted">
+              维度 · {sem.dimensions.length}
+            </div>
+            <div className="space-y-1.5">
+              {sem.dimensions.length === 0 ? (
+                <div className="rounded-xl bg-surface-2 px-3 py-2 text-xs text-muted">
+                  暂无维度
+                </div>
+              ) : (
+                sem.dimensions.map(renderDimension)
+              )}
+            </div>
+          </div>
+
+          {actionMsg && (
+            <div className="mt-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">
+              {actionMsg}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

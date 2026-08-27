@@ -21,6 +21,28 @@ export type {
 // Set NEXT_PUBLIC_API_URL to an absolute URL only for non-proxied deployments.
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+/** Attach the current access token (if any) to an outgoing request. */
+export function authHeaders(
+  init?: RequestInit | undefined,
+): RequestInit | undefined {
+  const token = typeof window !== "undefined"
+    ? window.localStorage.getItem("if_access_token")
+    : null;
+  if (!token) return init;
+  return {
+    ...init,
+    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
+  };
+}
+
+/** Thin wrapper around fetch that forwards the current auth token. */
+export async function apiFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit | undefined,
+): Promise<Response> {
+  return fetch(input, authHeaders(init));
+}
+
 export async function parseError(res: Response): Promise<never> {
   let detail = res.statusText;
   try {
@@ -40,13 +62,13 @@ export function errMsg(e: unknown): string {
 }
 
 export async function listDatasets(): Promise<DatasetSummary[]> {
-  const res = await fetch(`${API_BASE}/api/v1/datasets`);
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets`);
   if (!res.ok) return parseError(res);
   return res.json();
 }
 
 export async function getDataset(id: string): Promise<DatasetDetail> {
-  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}`);
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets/${id}`);
   if (!res.ok) return parseError(res);
   return res.json();
 }
@@ -58,7 +80,7 @@ export async function uploadDataset(
   const form = new FormData();
   form.append("file", file);
   if (name) form.append("name", name);
-  const res = await fetch(`${API_BASE}/api/v1/datasets`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets`, {
     method: "POST",
     body: form,
   });
@@ -67,7 +89,7 @@ export async function uploadDataset(
 }
 
 export async function deleteDataset(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets/${id}`, {
     method: "DELETE",
   });
   if (!res.ok) return parseError(res);
@@ -89,7 +111,7 @@ export interface ConnectDBPayload {
 export async function connectDatabase(
   payload: ConnectDBPayload,
 ): Promise<DatasetDetail> {
-  const res = await fetch(`${API_BASE}/api/v1/datasets/connect`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets/connect`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -99,7 +121,7 @@ export async function connectDatabase(
 }
 
 export async function checkHealth(): Promise<{ status: string }> {
-  const res = await fetch(`${API_BASE}/health`);
+  const res = await apiFetch(`${API_BASE}/health`);
   if (!res.ok) return parseError(res);
   return res.json();
 }
@@ -161,7 +183,7 @@ export interface SemanticLayer {
 }
 
 export async function getDatasetProfile2(id: string): Promise<DatasetProfile2> {
-  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}/profile`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets/${id}/profile`, {
     cache: "no-store",
   });
   if (!res.ok) return parseError(res);
@@ -169,7 +191,7 @@ export async function getDatasetProfile2(id: string): Promise<DatasetProfile2> {
 }
 
 export async function getDatasetSemantics(id: string): Promise<SemanticLayer> {
-  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}/semantics`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets/${id}/semantics`, {
     cache: "no-store",
   });
   if (!res.ok) return parseError(res);
@@ -181,7 +203,7 @@ export async function confirmSemantic(
   itemType: "metric" | "dimension",
   itemId: string,
 ): Promise<{ id: string; type: string; status: string }> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/api/v1/datasets/${datasetId}/semantics/${itemType}/${itemId}/confirm`,
     { method: "PATCH" },
   );
@@ -215,7 +237,7 @@ export interface InsightsResponse {
 }
 
 export async function getDatasetInsights(id: string): Promise<InsightsResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/datasets/${id}/insights`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/datasets/${id}/insights`, {
     cache: "no-store",
   });
   if (!res.ok) return parseError(res);
@@ -289,7 +311,7 @@ export interface RootCauseResponse {
 export async function getAnalysisEvidences(
   id: string
 ): Promise<EvidencesResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/evidences`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/analyses/${id}/evidences`, {
     cache: "no-store",
   });
   if (!res.ok) return parseError(res);
@@ -299,7 +321,7 @@ export async function getAnalysisEvidences(
 export async function getAnalysisRootCause(
   id: string
 ): Promise<RootCauseResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/root-cause`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/analyses/${id}/root-cause`, {
     cache: "no-store",
   });
   if (!res.ok) return parseError(res);
@@ -327,7 +349,7 @@ export interface EvidenceGraphResponse {
 export async function getEvidenceGraph(
   id: string
 ): Promise<EvidenceGraphResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/evidence-graph`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/analyses/${id}/evidence-graph`, {
     cache: "no-store",
   });
   if (!res.ok) return parseError(res);
@@ -338,7 +360,7 @@ export async function createAnalysis(
   datasetIds: string[],
   query: string,
 ): Promise<AnalysisOut> {
-  const res = await fetch(`${API_BASE}/api/v1/analyses`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/analyses`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataset_ids: datasetIds, query }),
@@ -348,7 +370,7 @@ export async function createAnalysis(
 }
 
 export async function getAnalysis(id: string): Promise<AnalysisOut> {
-  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}`);
+  const res = await apiFetch(`${API_BASE}/api/v1/analyses/${id}`);
   if (!res.ok) return parseError(res);
   return res.json();
 }
@@ -361,7 +383,7 @@ export async function listAnalyses(
   const params = new URLSearchParams();
   if (datasetId) params.set("dataset_id", datasetId);
   params.set("limit", String(limit));
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/api/v1/analyses?${params.toString()}`,
     { method: "GET" },
   );
@@ -374,7 +396,7 @@ export async function runAnalysisStream(
   id: string,
   onEvent: (ev: AnalysisEvent) => void,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/run`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/analyses/${id}/run`, {
     method: "POST",
   });
   if (!res.ok) return parseError(res);
@@ -408,7 +430,7 @@ export async function runAnalysisStream(
 }
 
 export async function getAnalysisTrace(id: string): Promise<AnalysisTrace> {
-  const res = await fetch(`${API_BASE}/api/v1/analyses/${id}/trace`, {
+  const res = await apiFetch(`${API_BASE}/api/v1/analyses/${id}/trace`, {
     cache: "no-store",
   });
   if (!res.ok) return parseError(res);
@@ -436,7 +458,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
 
 export async function getReport(id: string): Promise<AnalysisReport | null> {
   const res = await withTimeout(
-    fetch(`${API_BASE}/api/v1/analyses/${id}/report`, { cache: "no-store" }),
+    apiFetch(`${API_BASE}/api/v1/analyses/${id}/report`, { cache: "no-store" }),
     30000,
     "加载报告超时，请稍后重试"
   );
@@ -448,7 +470,7 @@ export async function getReport(id: string): Promise<AnalysisReport | null> {
 
 export async function createReport(id: string): Promise<AnalysisReport> {
   const res = await withTimeout(
-    fetch(`${API_BASE}/api/v1/analyses/${id}/report`, { method: "POST" }),
+    apiFetch(`${API_BASE}/api/v1/analyses/${id}/report`, { method: "POST" }),
     120000,
     "报告生成超时（模型响应较慢），请点击重试"
   );

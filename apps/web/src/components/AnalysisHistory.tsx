@@ -40,7 +40,7 @@ export default function AnalysisHistory({
   onSelect?: (payload: HistoryPayload | null) => void;
   onSelectLoading?: (loading: boolean) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [list, setList] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);

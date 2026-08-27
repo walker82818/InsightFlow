@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   deleteDataset,
   listDatasets,
@@ -22,6 +23,8 @@ export default function DatasetsPage() {
   const [name, setName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const router = useRouter();
 
   async function refresh() {
     setLoading(true);
@@ -58,10 +61,37 @@ export default function DatasetsPage() {
     if (!confirm("确认删除该数据集？")) return;
     try {
       await deleteDataset(id);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       await refresh();
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === datasets.length) setSelected(new Set());
+    else setSelected(new Set(datasets.map((d) => d.id)));
+  }
+
+  function startAnalysis() {
+    if (selected.size === 0) return;
+    const ids = datasets
+      .filter((d) => selected.has(d.id))
+      .map((d) => d.id);
+    router.push(`/datasets/${ids[0]}?ids=${ids.join(",")}`);
   }
 
   return (
@@ -101,6 +131,27 @@ export default function DatasetsPage() {
       </div>
 
       <div className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+        {selected.size > 0 && (
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-indigo-50/60 px-4 py-3">
+            <span className="text-sm text-slate-700">
+              已选 <span className="font-semibold text-indigo-600">{selected.size}</span> 张表
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-sm text-slate-500 hover:text-slate-800"
+              >
+                取消选择
+              </button>
+              <button
+                onClick={startAnalysis}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                开始分析（{selected.size}）
+              </button>
+            </div>
+          </div>
+        )}
         {loading ? (
           <p className="p-6 text-sm text-slate-500">加载中…</p>
         ) : datasets.length === 0 ? (
@@ -109,6 +160,15 @@ export default function DatasetsPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-slate-200 text-left text-slate-500">
               <tr>
+                <th className="w-10 p-4">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === datasets.length}
+                    onChange={toggleAll}
+                    aria-label="全选"
+                    className="h-4 w-4 accent-indigo-600"
+                  />
+                </th>
                 <th className="p-4">名称</th>
                 <th className="p-4">类型</th>
                 <th className="p-4">行 × 列</th>
@@ -121,8 +181,19 @@ export default function DatasetsPage() {
               {datasets.map((d) => (
                 <tr
                   key={d.id}
-                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                  className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${
+                    selected.has(d.id) ? "bg-indigo-50/40" : ""
+                  }`}
                 >
+                  <td className="p-4">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(d.id)}
+                      onChange={() => toggle(d.id)}
+                      aria-label={`选择 ${d.name}`}
+                      className="h-4 w-4 accent-indigo-600"
+                    />
+                  </td>
                   <td className="p-4 font-medium text-slate-900">{d.name}</td>
                   <td className="p-4 uppercase text-slate-500">{d.file_type}</td>
                   <td className="p-4 text-slate-600">

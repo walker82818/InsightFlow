@@ -9,7 +9,9 @@ import {
   downloadReport,
   downloadReportMarkdown,
   reportExportUrl,
+  listDatasets,
 } from "@/lib/api";
+import type { DatasetSummary } from "@/types/dataset";
 import type {
   AnalysisEvent,
   AnalysisTrace,
@@ -38,12 +40,16 @@ const STATUS_META: Record<Status, { label: string; cls: string }> = {
 };
 
 export default function AnalysisChat({
-  datasetId,
+  datasetIds,
   seed,
+  onAddDataset,
+  onRemoveDataset,
   onAnalysisDone,
 }: {
-  datasetId: string;
+  datasetIds: string[];
   seed?: string;
+  onAddDataset?: (id: string) => void;
+  onRemoveDataset?: (id: string) => void;
   onAnalysisDone?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("chat");
@@ -51,8 +57,28 @@ export default function AnalysisChat({
   const [status, setStatus] = useState<Status>("idle");
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
+  const [seedOpen, setSeedOpen] = useState(false);
+  const [seedText, setSeedText] = useState(seed ?? "");
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [trace, setTrace] = useState<AnalysisTrace | null>(null);
+  const [allDatasets, setAllDatasets] = useState<DatasetSummary[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Load the full dataset list once, so the user can append more tables later.
+  useEffect(() => {
+    let cancelled = false;
+    listDatasets()
+      .then((list) => {
+        if (!cancelled) setAllDatasets(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const nameOf = (id: string) =>
+    allDatasets.find((d) => d.id === id)?.name ?? "数据表";
 
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -127,8 +153,12 @@ export default function AnalysisChat({
   async function send(q: string) {
     const base = q.trim();
     if (!base || loading) return;
-    const text = seed?.trim()
-      ? `${base}\n\n[分析侧重] ${seed.trim()}`
+    if (datasetIds.length === 0) {
+      setQuery("请先选择至少一张数据表");
+      return;
+    }
+    const text = seedText.trim()
+      ? `${base}\n\n[分析侧重] ${seedText.trim()}`
       : base;
     setEvents([]);
     setTrace(null);
@@ -141,7 +171,7 @@ export default function AnalysisChat({
     reportStartedRef.current = null;
     setTab("chat");
     try {
-      const created = await createAnalysis([datasetId], text);
+      const created = await createAnalysis(datasetIds, text);
       setAnalysisId(created.id);
       await runAnalysisStream(created.id, (ev) => {
         setEvents((prev) => [...prev, ev]);
@@ -267,6 +297,68 @@ export default function AnalysisChat({
       <div className="min-h-0 flex-1">
         {tab === "chat" && (
           <div className="flex h-full flex-col">
+            {/* Selected datasets bar */}
+            <div className="flex items-center gap-2 border-b border-line bg-paper-2/40 px-4 py-2">
+              <span className="shrink-0 text-xs font-semibold text-muted">
+                已选表
+              </span>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                {datasetIds.map((did) => (
+                  <span
+                    key={did}
+                    className="inline-flex max-w-[16rem] items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink"
+                    title={nameOf(did)}
+                  >
+                    <span className="truncate">{nameOf(did)}</span>
+                    <button
+                      type="button"
+                      aria-label={`移除 ${nameOf(did)}`}
+                      onClick={() =>
+                        onRemoveDataset ? onRemoveDataset(did) : undefined
+                      }
+                      className="text-faint transition hover:text-danger"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPickerOpen((v) => !v)}
+                className="shrink-0 rounded-lg border border-dashed border-line px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-accent-strong"
+              >
+                + 追加数据集
+              </button>
+            </div>
+
+            {pickerOpen && (
+              <div className="border-b border-line bg-paper-2/40 px-4 py-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {allDatasets
+                    .filter((d) => !datasetIds.includes(d.id))
+                    .map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => {
+                          onAddDataset?.(d.id);
+                        }}
+                        className="rounded-lg border border-line bg-surface px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-accent-strong"
+                      >
+                        + {d.name}
+                      </button>
+                    ))}
+                  {allDatasets.filter((d) => !datasetIds.includes(d.id))
+                    .length === 0 && (
+                    <span className="text-xs text-faint">
+                      没有更多可选的数据集。
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
               {events.length === 0 && !loading && (
                 <div className="flex h-full flex-col items-center justify-center text-center">
@@ -316,6 +408,38 @@ export default function AnalysisChat({
 
             {/* Composer */}
             <div className="border-t border-line p-3">
+              <button
+                type="button"
+                onClick={() => setSeedOpen((v) => !v)}
+                className="mb-2 flex w-full items-center gap-2 text-xs text-muted transition hover:text-ink"
+              >
+                <span
+                  className={`inline-flex h-4 w-4 items-center justify-center rounded bg-surface-2 text-faint transition-transform duration-200 ${
+                    seedOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden
+                >
+                  ▾
+                </span>
+                分析侧重
+                {seedText.trim() ? (
+                  <span className="max-w-[16rem] truncate text-faint">
+                    · {seedText.trim()}
+                  </span>
+                ) : (
+                  <span className="text-faint">（可选，随每次提问附加）</span>
+                )}
+              </button>
+
+              {seedOpen && (
+                <textarea
+                  className="input mb-2 min-h-[52px] resize-none"
+                  value={seedText}
+                  onChange={(e) => setSeedText(e.target.value)}
+                  placeholder="例如：重点关注用户留存与高价值人群特征"
+                />
+              )}
+
               <div className="flex items-end gap-2">
                 <textarea
                   className="input min-h-[44px] flex-1 resize-none"
