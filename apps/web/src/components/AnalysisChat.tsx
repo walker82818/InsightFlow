@@ -19,6 +19,7 @@ import type {
 } from "@/types/analysis";
 import AnalysisReportView from "@/components/AnalysisReport";
 import AgentTrace from "@/components/AgentTrace";
+import ArtifactCard from "@/components/ArtifactCard";
 import EvidencePanel from "@/components/EvidencePanel";
 import Markdown from "@/components/Markdown";
 
@@ -387,7 +388,7 @@ export default function AnalysisChat({
                 </div>
               )}
               {events.map((ev, i) => (
-                <EventCard key={i} event={ev} />
+                <EventCard key={i} event={ev} analysisId={analysisId} />
               ))}
               {loading && (
                 <div className="flex items-center gap-2 px-1 py-2 text-sm text-muted">
@@ -646,7 +647,23 @@ function metaFor(type: AnalysisEvent["type"]): {
   }
 }
 
-export function EventCard({ event }: { event: AnalysisEvent }) {
+export function EventCard({
+  event,
+  analysisId,
+}: {
+  event: AnalysisEvent;
+  analysisId?: string | null;
+}) {
+  // Agent2UI：chart 事件直接渲染沙箱 artifact（含自愈循环）
+  if (event.type === "chart") {
+    return (
+      <ArtifactCard
+        spec={event.spec}
+        analysisId={analysisId}
+      />
+    );
+  }
+
   const meta = metaFor(event.type);
 
   // Conversational / prose events render as markdown; structured & data
@@ -699,8 +716,8 @@ function formatEvent(event: AnalysisEvent): string {
     case "error":
       return event.message ?? "分析出错";
     case "chart":
-      return `📊 已生成图表：${event.spec.title ?? event.spec.type}`;
+      return `📊 已生成图表：${event.spec.title ?? "AI 可视化"}`;
     default:
-      return "";
+      return "unknown";
   }
 }

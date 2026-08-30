@@ -27,7 +27,7 @@ class AgentState(TypedDict, total=False):
     analysis_results: Annotated[list[dict], operator.add]  # every tool call: {tool, sql/code, result}
     sql_results: Annotated[list[dict], operator.add]  # {sql, result}
     python_results: Annotated[list[dict], operator.add]  # {code, result}
-    visualizations: list[dict]  # ChartSpec dicts
+    visualizations: list[dict]  # Agent2UI: ArtifactSpec dicts {title, code, imports, data}
     answer: str
     review_result: dict
     errors: list[str]

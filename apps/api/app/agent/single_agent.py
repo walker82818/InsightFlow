@@ -92,8 +92,12 @@ def _build_trace(events: list[dict]) -> tuple[list[dict], list[dict]]:
                 dict(
                     agent="visualization",
                     step_type="chart",
-                    content=f"{spec.get('title', '')} [{spec.get('type')}]",
-                    input={"renderer": spec.get("renderer"), "type": spec.get("type")},
+                    content=spec.get("title", ""),
+                    input={
+                        "renderer": "artifact" if spec.get("code") else spec.get("renderer"),
+                        "type": spec.get("type"),
+                        "has_code": bool(spec.get("code")),
+                    },
                     ts_ms=ts,
                     order_idx=order,
                     status="ok",

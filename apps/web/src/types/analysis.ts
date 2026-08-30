@@ -1,4 +1,5 @@
 // Analysis domain types (Phase 2), mirroring the backend AnalysisOut / SSE events.
+import type { ArtifactSpec } from "@insightflow/artifact-schema";
 
 export type AnalysisStatus = "pending" | "running" | "completed" | "error";
 
@@ -75,9 +76,10 @@ export interface ChartSpec {
   seriesOptions?: Record<string, unknown>;
 }
 
+// Agent2UI：Agent 直接输出的可执行 UI（TSX），不再是枚举式 ChartSpec。
 export interface ChartEvent {
   type: "chart";
-  spec: ChartSpec;
+  spec: ArtifactSpec;
 }
 
 // ---- Phase 6: Agent Trace ----

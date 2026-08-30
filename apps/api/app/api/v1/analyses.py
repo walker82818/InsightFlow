@@ -27,6 +27,11 @@ from app.models.user import User
 from app.repositories import analysis as repo
 from app.repositories import report as report_repo
 from app.schemas.analysis import AnalysisCreate, AnalysisOut, AnalysisSummaryOut
+from app.schemas.artifact import (
+    ArtifactRepairRequest,
+    ArtifactRepairResponse,
+    ArtifactSpec,
+)
 from app.schemas.report import ReportOut
 from app.services.duckdb import table_name
 from app.services.report import generate_report, render_html_report
@@ -242,6 +247,33 @@ async def get_analysis_root_cause(
             "created_at": row.created_at.isoformat() if row.created_at else None,
         },
     }
+
+
+@router.post("/{analysis_id}/artifact-repair", response_model=ArtifactRepairResponse)
+async def repair_analysis_artifact(
+    analysis_id: str,
+    payload: ArtifactRepairRequest,
+) -> ArtifactRepairResponse:
+    """Agent2UI 自愈：根据 iframe 渲染报错修复 ArtifactSpec。
+
+    前端在收到 iframe 的 ``error`` 事件后调用（最多 3 轮，attempt 由前端计数）。
+    服务端加载该次分析的上下文（query / 字段 / 数据集），连同上次代码与报错
+    一起交给 LLM 修复，返回新的 ArtifactSpec。
+    """
+    from app.services.artifact_repair import repair_artifact as _repair
+
+    outcome = await _repair(
+        analysis_id,
+        payload.spec.model_dump(mode="json"),
+        payload.error.model_dump(),
+    )
+    if not outcome.get("repaired"):
+        return ArtifactRepairResponse(
+            repaired=False, spec=None, reason=outcome.get("reason")
+        )
+    return ArtifactRepairResponse(
+        repaired=True, spec=ArtifactSpec(**outcome["spec"]), reason=None
+    )
 
 
 # ---------------------------------------------------------------------------

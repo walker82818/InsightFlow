@@ -309,11 +309,19 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
         else "<p class='summary'>（暂无）</p>"
     )
 
-    # charts: render container divs (echarts) or a table fallback for r3f
+    # charts: render container divs (echarts) or a table fallback for r3f.
+    # Agent2UI: ArtifactSpec（含 code）在静态导出中以占位呈现（P2 截图服务将替换为 PNG 快照）。
     chart_blocks: list[str] = []
     non_r3f: list[dict[str, Any]] = []
     idx = 0
     for spec in charts:
+        if spec.get("code"):
+            chart_blocks.append(
+                f"<div class='evidence-block'><h3>{esc(spec.get('title','AI 图表'))}</h3>"
+                "<p class='summary'>AI 生成的可交互图表（TSX），PDF/HTML 静态导出中暂以占位呈现；"
+                "完整交互渲染请查看分析页，报告截图功能将于 P2 提供。</p></div>"
+            )
+            continue
         if spec.get("renderer") == "r3f":
             cols = spec.get("columns") or []
             rows = spec.get("rows") or []

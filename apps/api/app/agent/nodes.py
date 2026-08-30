@@ -11,6 +11,7 @@ import asyncio
 import contextvars
 import json
 import math
+import re
 from time import perf_counter
 from typing import Any
 
@@ -102,51 +103,105 @@ ANALYSIS_SYSTEM = """你是一名严谨的数据分析助手。你可以通过�
    - 若 SQL 报错 `Referenced column "X" not found`，说明 X 不在当前可见列里：
      先核对内层 SELECT 到底输出了哪些列名，用那些名字重写外层，不要臆想原列。"""
 
-VIZ_SYSTEM = """你是可视化专家。根据分析结果选择最合适的图表类型与坐标轴字段，调用 generate_chart 工具。
-- 2D（echarts）优先用柱状图/折线图展示对比与趋势，用饼图展示占比。
-- 当结果至少包含 3 个数值列、且问题适合空间关系时，可选用 3D 图表：3d_scatter（三点分布）或 3d_bar（三维柱）。
-- x/y 字段（3D 还需 z_field）必须来自真实返回的列名，不要臆造数据（data 由系统自动填充）。"""
+ARTIFACT_VIZ_SYSTEM = """你是 React 可视化专家。根据给定的分析数据，编写一个单文件 React TSX 组件，用于在 iframe 沙箱内渲染。
+
+硬性要求：
+1. 组件必须默认导出：export default function App({ data, theme }) { ... }。
+   data 是系统注入的对象数组（元素形如 {"列名": 值}），theme 取值 "light" 或 "dark"。
+2. 只能 import 白名单模块：react、react/jsx-runtime、react-dom/client、echarts。
+   推荐用 echarts（import * as echarts from "echarts"）在 useEffect 里初始化图表。
+3. 禁止 import 其他任何模块；禁止使用 fetch、localStorage、document 等；数据只能来自 props.data，禁止硬编码数据。
+4. 样式用内联 style 或 className 均可；图表/容器必须有明确高度（如 style={{ height: 320 }}）；简洁美观、中文标注。
+5. useEffect 里创建的 echarts 实例必须在清理函数里 dispose()。
+
+输出格式（必须）：
+第一行：标题：<图表标题>
+然后一个 ```tsx 代码块，内容为完整组件。除标题行与代码块外不要输出任何其他文字。
+
+示例：
+标题：各地区销售额对比
+```tsx
+import { useEffect, useRef } from "react";
+import * as echarts from "echarts";
+
+export default function App({ data, theme }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const chart = echarts.init(ref.current, theme === "dark" ? "dark" : undefined);
+    chart.setOption({
+      tooltip: {},
+      xAxis: { type: "category", data: data.map((d) => d.region) },
+      yAxis: { type: "value" },
+      series: [{ type: "bar", data: data.map((d) => d.sales), itemStyle: { color: "#f5a623" } }],
+    });
+    return () => chart.dispose();
+  }, [data, theme]);
+  return <div ref={ref} style={{ width: "100%", height: 320 }} />;
+}
+```
+"""
 
 REVIEWER_SYSTEM = """你是分析审查员。判断最终结论是否有前面的 SQL/Python 结果作为证据支持，\
 结论与证据是否一致。请重点核对：结论中引用的关键数字（金额、计数、均值、占比、排名等）\
 是否能在证据里找到对应的值；若结论声称了证据中不存在的趋势或对比，应标记未通过。\
 若明显缺乏证据、自相矛盾，或结论中的数字与证据不符，标记未通过并简短说明原因；否则标记通过。"""
 
-GENERATE_CHART_TOOL: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "generate_chart",
-        "description": "为分析结果生成图表规格（data 由系统填充，只需给出类型与轴字段）。2D 用 echarts，前缀 3d_ 为三维图表用 react-three-fiber 渲染。",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "bar",
-                        "line",
-                        "pie",
-                        "scatter",
-                        "histogram",
-                        "area",
-                        "3d_scatter",
-                        "3d_bar",
-                    ],
-                    "description": "图表类型；3d_scatter/3d_bar 为三维图表",
-                },
-                "title": {"type": "string", "description": "图表标题"},
-                "x_field": {"type": "string", "description": "横轴字段（来自真实列名）"},
-                "y_field": {"type": "string", "description": "纵轴字段（来自真实列名）"},
-                "z_field": {
-                    "type": "string",
-                    "description": "三维图表可选：第三维字段（来自真实数值列）",
-                },
-            },
-            "required": ["type", "x_field", "y_field"],
-            "additionalProperties": False,
-        },
-    },
+# —— Agent2UI：ArtifactSpec（TSX）契约（与 packages/artifact-schema 对齐）——
+ARTIFACT_ALLOWED_IMPORTS = {
+    "react",
+    "react/jsx-runtime",
+    "react-dom/client",
+    "echarts",
+    "three",
+    "/_artifacts/insight-ui.js",
 }
+ARTIFACT_MAX_CODE_BYTES = 32 * 1024
+
+_TSX_FENCE_RE = re.compile(r"```(?:tsx|jsx)?\s*\n([\s\S]*?)```", re.IGNORECASE)
+_IMPORT_FROM_RE = re.compile(r'import\s+(?:type\s+)?[\s\S]*?from\s*["\']([^"\']+)["\']')
+_SIDE_EFFECT_RE = re.compile(r'import\s*["\']([^"\']+)["\']')
+
+
+def _extract_artifact_spec(
+    text: str | None, *, title_fallback: str = "", data: Any = None
+) -> dict[str, Any] | None:
+    """Parse LLM output into ``{title, code, imports, data}`` or None.
+
+    Expected format: first line ``标题：xxx``, then a ```tsx fenced code block.
+    """
+    if not text:
+        return None
+    m = _TSX_FENCE_RE.search(text)
+    if not m:
+        return None
+    code = m.group(1).strip()
+    if not code or "export default" not in code:
+        return None
+    title = title_fallback
+    tm = re.search(r"标题[:：]\s*([^\n]+)", text)
+    if tm:
+        title = tm.group(1).strip()
+    imports: list[str] = []
+    for re_ in (_IMPORT_FROM_RE, _SIDE_EFFECT_RE):
+        for mm in re_.finditer(code):
+            if mm.group(1) not in imports:
+                imports.append(mm.group(1))
+    return {"title": title, "code": code, "imports": imports, "data": data}
+
+
+def _artifact_validation_error(spec: dict[str, Any]) -> str | None:
+    """Return an error message if the spec violates the contract, else None."""
+    code = spec.get("code", "") or ""
+    if len(code.encode("utf-8")) > ARTIFACT_MAX_CODE_BYTES:
+        return "代码超过 32KB 体积上限"
+    if "export default" not in code:
+        return "缺少 export default 默认导出"
+    illegal = [
+        m for m in (spec.get("imports") or []) if m not in ARTIFACT_ALLOWED_IMPORTS
+    ]
+    if illegal:
+        return f"包含白名单外 import: {', '.join(illegal)}"
+    return None
 
 REVIEW_TOOL: dict[str, Any] = {
     "type": "function",
@@ -491,50 +546,46 @@ async def visualization_node(state: AgentState) -> dict[str, Any]:
 
     client = get_llm_client(ModelSize.large)
     messages = [
-        LLMMessage(role="system", content=VIZ_SYSTEM),
+        LLMMessage(role="system", content=ARTIFACT_VIZ_SYSTEM),
         LLMMessage(
             role="user",
             content=(
                 f"用户问题：{state['user_query']}\n"
-                f"可用字段：{cols}\n"
+                f"可用字段（列名）：{cols}\n"
                 f"数值字段：{numeric_cols}\n"
                 f"结果行数：{rc}\n"
-                f"样例：{json.dumps(sample, ensure_ascii=False)[:1500]}\n"
-                "请调用 generate_chart 选择图表类型与 x/y 轴字段（三维图表还需 z_field）。"
+                f"样例数据：{json.dumps(sample[:5], ensure_ascii=False)}\n"
+                "请基于以上字段与样例，生成一个展示该分析结果的 TSX 组件"
+                "（优先图表；仅当字段过少或无意义时才用表格）。"
             ),
         ),
     ]
     try:
-        resp = await client.chat(messages, tools=[GENERATE_CHART_TOOL], temperature=0.0)
+        resp = await client.chat(messages, temperature=0.2)
     except RuntimeError as exc:
         return {
             "visualizations": [],
             "events": [_ev("error", message=f"可视化失败: {exc}")],
         }
-    spec = None
-    if resp.tool_calls:
-        a = resp.tool_calls[0].arguments
-        ctype = a.get("type", "bar")
-        is_3d = ctype.startswith("3d_")
-        spec = {
-            "renderer": "r3f" if is_3d else "echarts",
-            "type": ctype,
-            "title": a.get("title", state["user_query"]),
-            "xField": a.get("x_field", cols[0]),
-            "yField": a.get("y_field", cols[1] if len(cols) > 1 else cols[0]),
-            "zField": a.get("z_field") if is_3d else None,
-            "data": data,
-        }
-    events = (
-        [_ev("chart", spec=spec)]
-        if spec
-        else [_ev("agent_activity", agent="visualization", content="未生成图表")]
+    spec = _extract_artifact_spec(
+        resp.content, title_fallback=state["user_query"], data=data
     )
+    if spec is None:
+        return {
+            "visualizations": [],
+            "events": [_ev("error", message="可视化生成失败：无法解析 LLM 输出的 TSX 代码")],
+        }
+    err = _artifact_validation_error(spec)
+    if err:
+        return {
+            "visualizations": [],
+            "events": [_ev("error", message=f"生成代码不合规：{err}")],
+        }
     return {
-        "visualizations": [spec] if spec else [],
+        "visualizations": [spec],
         "prompt_tokens": resp.prompt_tokens,
         "completion_tokens": resp.completion_tokens,
-        "events": events,
+        "events": [_ev("chart", spec=spec)],
     }
 
 

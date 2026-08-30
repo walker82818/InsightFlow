@@ -1,3 +1,4 @@
+import type { ArtifactSpec } from "@insightflow/artifact-schema";
 import type { DatasetDetail, DatasetSummary } from "@/types/dataset";
 import type {
   AnalysisEvent,
@@ -435,6 +436,37 @@ export async function getAnalysisTrace(id: string): Promise<AnalysisTrace> {
   });
   if (!res.ok) return parseError(res);
   return res.json();
+}
+
+// ---- Agent2UI: artifact 错误自愈 ----
+
+export interface ArtifactRepairError {
+  message: string;
+  line?: number;
+  column?: number;
+}
+
+/** 让后端 LLM 根据 iframe 渲染报错修复 ArtifactSpec（前端最多调用 3 轮）。 */
+export async function repairArtifact(
+  analysisId: string,
+  spec: ArtifactSpec,
+  error: ArtifactRepairError,
+  attempt: number,
+): Promise<ArtifactSpec> {
+  const res = await apiFetch(
+    `${API_BASE}/api/v1/analyses/${analysisId}/artifact-repair`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec, error, attempt }),
+    },
+  );
+  if (!res.ok) return parseError(res);
+  const body = await res.json();
+  if (!body.repaired || !body.spec) {
+    throw new Error(body.reason ?? "AI 修复失败，请重试");
+  }
+  return body.spec as ArtifactSpec;
 }
 
 // ---- Phase 7: report ----

@@ -1,4 +1,5 @@
-import type { AnalysisEvent, ChartSpec } from "@/types/analysis";
+import type { ArtifactSpec } from "@insightflow/artifact-schema";
+import type { AnalysisEvent } from "@/types/analysis";
 
 /**
  * Reconstruct a read-only event stream from a persisted analysis result so a
@@ -10,7 +11,7 @@ export function buildReplayEvents(
   const evs: AnalysisEvent[] = [];
   const plan = (result.plan as string[]) ?? [];
   const steps = (result.steps as Array<Record<string, unknown>>) ?? [];
-  const viz = (result.visualizations as ChartSpec[]) ?? [];
+  const viz = (result.visualizations as ArtifactSpec[]) ?? [];
   const answer = (result.answer as string) ?? "";
 
   evs.push({
