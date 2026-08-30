@@ -38,6 +38,10 @@ _unpack.py
 _source_design.md
 data/
 *.csv
+_empty_tmp/
+_junc_test/
+.screenshots/
+pnpm-debug.log*
 
 # Runtime logs (server stdout/stderr redirection)
 *.err
@@ -45,3 +49,6 @@ data/
 
 # Dev scratch scripts in api root (underscore-prefixed)
 apps/api/_*
+
+# Agent2UI vendor: build artifact（用 scripts/build-artifact-vendor.mjs 在 apps/web 生成）
+apps/web/public/_artifacts/vendor/

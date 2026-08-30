@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@insightflow/artifact-schema": "workspace:*",
     "@insightflow/chart-schema": "workspace:*",
     "@insightflow/shared-types": "workspace:*",
     "@react-three/drei": "^10.7.8",

@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>InsightFlow Artifact Runtime</title>
+  <!--
+    Agent2UI 沙箱运行时（严格隔离）：
+    - iframe sandbox="allow-scripts"（不带 allow-same-origin）→ 本页 origin 为 opaque，
+      运行时代码拿不到主页面 Cookie / Storage / 父级 DOM。
+    - 所有进出数据走 postMessage（mount / unmount / ready / resize / error / event）。
+    - esbuild-wasm 在主页面侧之外按需初始化（本页内），编译 TSX → 动态 import 挂载 React。
+  -->
+  <!--
+    完全离网 CSP：所有库已本地化到 /_artifacts/vendor/（见 scripts/build-artifact-vendor.mjs）。
+    sandbox opaque origin 无法跨源动态 import（CORS），且 CDN 在国内网络不可达，故零外网。
+  -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             script-src 'self' 'unsafe-inline' blob:;
+             style-src 'self' 'unsafe-inline';
+             img-src 'self' data: blob:;
+             font-src 'self' data:;
+             connect-src 'self' blob:;"
+  />
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "/_artifacts/vendor/react.js",
+        "react/jsx-runtime": "/_artifacts/vendor/react-jsx-runtime.js",
+        "react-dom/client": "/_artifacts/vendor/react-dom-client.js",
+        "echarts": "/_artifacts/vendor/echarts.js"
+      }
+    }
+  </script>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    #root {
+      min-height: 100%;
+    }
+    .rt-error {
+      margin: 12px;
+      padding: 12px 14px;
+      border: 1px solid #e7c9c3;
+      border-radius: 10px;
+      background: #fdf3f1;
+      color: #b3261e;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .rt-error .rt-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- esbuild-wasm 浏览器版（UMD，暴露全局 esbuild）。已本地化到同源静态目录（jsdelivr 在国内浏览器不可达）。 -->
+  <script src="/_artifacts/vendor/esbuild/browser.min.js"></script>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const rootEl = document.getElementById("root");
+      let esbuildReady = null; // Promise
+      let reactRoot = null;
+      let objectUrl = null;
+      let rafId = 0;
+
+      function post(msg) {
+        // sandbox opaque origin 下 targetOrigin 只能为 "*"，由父页面校验 event.source。
+        window.parent.postMessage(msg, "*");
+      }
+
+      function reportError(error, detail) {
+        const line =
+          (error && error.lineNumber) ||
+          (error && error.line) ||
+          (detail && detail.lineNumber) ||
+          (detail && detail.line) ||
+          undefined;
+        const column =
+          (error && error.columnNumber) ||
+          (error && error.column) ||
+          (detail && detail.columnNumber) ||
+          (detail && detail.column) ||
+          undefined;
+        post({
+          type: "error",
+          error: {
+            message: error && error.message ? error.message : String(error),
+            line,
+            column,
+          },
+        });
+        if (rootEl) {
+          rootEl.innerHTML =
+            '<div class="rt-error"><div class="rt-title">Artifact 渲染失败</div>' +
+            (error && error.message ? escapeHtml(error.message) : "unknown error") +
+            (line ? " (line " + line + ")" : "") +
+            "</div>";
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      // 调试辅助：把当前阶段状态写到 iframe 内（P0 排障用，稳定后可移除）
+      function setStatus(text) {
+        if (rootEl) {
+          rootEl.innerHTML =
+            '<div style="padding:10px;font-size:12px;color:#a0876f;font-family:monospace">' +
+            escapeHtml(text) +
+            "</div>";
+        }
+      }
+
+      window.addEventListener("error", (e) => {
+        reportError(e.error || e.message);
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        reportError(e.reason);
+      });
+
+      function getEsbuild() {
+        if (!esbuildReady) {
+          esbuildReady = (async () => {
+            if (typeof window.esbuild === "undefined") {
+              throw new Error("esbuild-wasm 加载失败（browser.min.js 未暴露全局）");
+            }
+            await window.esbuild.initialize({
+              wasmURL: "/_artifacts/vendor/esbuild/esbuild.wasm",
+              worker: false,
+            });
+            return window.esbuild;
+          })();
+        }
+        return esbuildReady;
+      }
+
+      async function compileTsx(source) {
+        const esbuild = await getEsbuild();
+        const result = await esbuild.transform(source, {
+          loader: "tsx",
+          jsx: "automatic",
+          format: "esm",
+          target: "es2020",
+        });
+        if (result && result.code) return result.code;
+        throw new Error("esbuild transform 返回空结果");
+      }
+
+      async function mount(msg) {
+        // 卸载旧的实例
+        await unmount();
+
+        const { code, data, theme } = msg;
+
+        // 1) 编译 TSX → ESM JS
+        let js;
+        try {
+          setStatus("① 初始化 esbuild / 编译 TSX…");
+          js = await compileTsx(code);
+        } catch (err) {
+          reportError(err);
+          return;
+        }
+
+        // 2) 通过 blob URL 动态 import（import 由 importmap 解析，走白名单）
+        try {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          objectUrl = URL.createObjectURL(
+            new Blob([js], { type: "text/javascript" })
+          );
+          setStatus("② 导入依赖（react / echarts via esm.sh）…");
+          const mod = await import(/* webpackIgnore: true */ objectUrl);
+          const App = mod && (mod.default || mod.App);
+          if (typeof App !== "function") {
+            throw new Error("生成代码未导出默认组件（export default function App）");
+          }
+
+          const ReactMod = await import("react");
+          const { createRoot } = await import("react-dom/client");
+
+          rootEl.innerHTML = "";
+          setStatus("③ 挂载 React 组件…");
+          reactRoot = createRoot(rootEl);
+          reactRoot.render(
+            ReactMod.createElement(App, { data, theme: theme || "light" })
+          );
+
+          // 3) 等首帧渲染完成后上报高度
+          rafId = requestAnimationFrame(() => {
+            rootEl.innerHTML = "";
+            post({ type: "ready", height: measureHeight() });
+          });
+        } catch (err) {
+          reportError(err);
+        }
+      }
+
+      async function unmount() {
+        if (reactRoot) {
+          try {
+            reactRoot.unmount();
+          } catch (e) {
+            /* 忽略卸载期错误 */
+          }
+          reactRoot = null;
+        }
+        rootEl.innerHTML = "";
+      }
+
+      function measureHeight() {
+        return Math.max(
+          document.body.scrollHeight,
+          document.documentElement.scrollHeight
+        );
+      }
+
+      // 内容尺寸变化 → 通知父页面自适应高度
+      const ro = new ResizeObserver(() => {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          post({ type: "resize", height: measureHeight() });
+        });
+      });
+      if (document.body) ro.observe(document.body);
+
+      window.addEventListener("message", async (event) => {
+        // 仅接受父页面（window.parent）的消息
+        if (event.source !== window.parent) return;
+        const msg = event.data;
+        if (!msg || typeof msg.type !== "string") return;
+        try {
+          if (msg.type === "mount") {
+            await mount(msg);
+          } else if (msg.type === "unmount") {
+            await unmount();
+          }
+        } catch (err) {
+          reportError(err);
+        }
+      });
+
+      post({ type: "ready", height: measureHeight() });
+    })();
+  </script>
+</body>
+</html>

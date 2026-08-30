@@ -11,7 +11,11 @@ const nextConfig: NextConfig = {
   // monorepo root so Next's standalone tracing can follow the pnpm workspace
   // deps (@insightflow/*) when building the Docker image.
   outputFileTracingRoot: path.join(__dirname, "..", ".."),
-  transpilePackages: ["@insightflow/chart-schema", "@insightflow/shared-types"],
+  transpilePackages: [
+    "@insightflow/artifact-schema",
+    "@insightflow/chart-schema",
+    "@insightflow/shared-types",
+  ],
   // apps/web ships its own .git, so point Turbopack's resolution root at the
   // monorepo root where pnpm hoists node_modules. Keeps the workspace working
   // without altering the nested git repo.
