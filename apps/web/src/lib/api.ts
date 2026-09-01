@@ -22,26 +22,12 @@ export type {
 // Set NEXT_PUBLIC_API_URL to an absolute URL only for non-proxied deployments.
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-/** Attach the current access token (if any) to an outgoing request. */
-export function authHeaders(
-  init?: RequestInit | undefined,
-): RequestInit | undefined {
-  const token = typeof window !== "undefined"
-    ? window.localStorage.getItem("if_access_token")
-    : null;
-  if (!token) return init;
-  return {
-    ...init,
-    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
-  };
-}
-
-/** Thin wrapper around fetch that forwards the current auth token. */
+/** Thin wrapper around fetch (open-source build: no auth token needed). */
 export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit | undefined,
 ): Promise<Response> {
-  return fetch(input, authHeaders(init));
+  return fetch(input, init);
 }
 
 export async function parseError(res: Response): Promise<never> {

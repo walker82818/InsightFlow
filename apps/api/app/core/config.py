@@ -45,13 +45,8 @@ class Settings(BaseSettings):
     allowed_extensions: list[str] = ["csv", "xlsx", "xls", "json"]
     preview_rows: int = 50
 
-    # 鉴权（本期跳过）：固定单默认用户
+    # 鉴权（开源版：免注册登录）：所有请求固定使用单默认用户
     default_user_id: str = "00000000-0000-0000-0000-000000000001"
-
-    # 认证 (Phase: registration + JWT login). 用于签发/校验 access token.
-    auth_secret_key: str = "insightflow-dev-secret-change-me"
-    auth_algorithm: str = "HS256"
-    auth_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
     # Python sandbox (Docker)
     sandbox_docker_image: str = "insightflow-sandbox:latest"
@@ -69,7 +64,7 @@ class Settings(BaseSettings):
     # Agent loop (Phase 3, LangGraph)
     agent_max_steps: int = 6  # max ReAct steps inside the analysis node
     agent_max_retries: int = 2  # Reviewer 触发重分析（ReAct 内循环）的最大轮次
-    max_chart_rows: int = 200  # rows fed into a generated ChartSpec
+    max_chart_rows: int = 200  # rows fed into a generated ArtifactSpec (Agent2UI)
     # 根因分析「变化显著性门槛」（Design D5）：环比变化幅度低于此值即拒答，
     # 避免对无意义波动强行编造根因。
     root_cause_min_delta: float = 0.05

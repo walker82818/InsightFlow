@@ -10,9 +10,8 @@ WORKDIR /repo
 RUN apk add --no-cache libc6-compat
 RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-# Prefetch the two workspace packages' manifests so pnpm install resolves.
-COPY packages/chart-schema/package.json packages/chart-schema/package.json
-COPY packages/shared-types/package.json packages/shared-types/package.json
+# Prefetch the workspace package manifests so pnpm install resolves.
+COPY packages/artifact-schema/package.json packages/artifact-schema/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --frozen-lockfile
 
