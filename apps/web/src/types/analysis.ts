@@ -64,19 +64,7 @@ export interface AgentEndEvent {
   result?: AgentEndResult;
 }
 
-export interface ChartSpec {
-  renderer: "echarts" | "r3f";
-  type: string; // bar | line | pie | scatter | histogram | area | ...
-  title?: string;
-  xField?: string | string[];
-  yField?: string | string[];
-  zField?: string;
-  data: Array<Record<string, unknown>>;
-  dimensions?: string[];
-  seriesOptions?: Record<string, unknown>;
-}
-
-// Agent2UI：Agent 直接输出的可执行 UI（TSX），不再是枚举式 ChartSpec。
+// Agent2UI：Agent 直接输出的可执行 UI（TSX）。
 export interface ChartEvent {
   type: "chart";
   spec: ArtifactSpec;
@@ -175,7 +163,7 @@ export interface AnalysisReport {
   executive_summary: string;
   key_findings: string[];
   evidence: ReportEvidence[];
-  charts: ChartSpec[];
+  charts: ArtifactSpec[];
   recommendations: string[];
   limitations?: string | null;
   metrics: ReportMetrics;

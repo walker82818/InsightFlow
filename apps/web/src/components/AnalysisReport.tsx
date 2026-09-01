@@ -1,7 +1,8 @@
 "use client";
 
-import type { AnalysisReport, ChartSpec, ReportEvidence } from "@/types/analysis";
-import ChartRenderer from "@/components/ChartRenderer";
+import type { AnalysisReport, ReportEvidence } from "@/types/analysis";
+import type { ArtifactSpec } from "@insightflow/artifact-schema";
+import ArtifactViewer from "@/components/ArtifactViewer";
 import Markdown from "@/components/Markdown";
 import CodeBlock from "@/components/CodeBlock";
 
@@ -157,17 +158,27 @@ export default function AnalysisReportView({ report }: { report: AnalysisReport 
         </section>
       )}
 
-      {/* Charts */}
+      {/* Charts: Agent2UI ArtifactSpec（含 code）在沙箱 iframe 内交互渲染，多图错峰挂载 */}
       {charts.length > 0 && (
         <section className="fade-up">
           <SectionTitle>可视化</SectionTitle>
           <div className="grid gap-4 md:grid-cols-2">
-            {charts.map((c: ChartSpec, i) => (
+            {charts.map((c: ArtifactSpec, i) => (
               <div key={i} className="card overflow-hidden p-4">
                 <div className="mb-2 text-sm font-semibold text-ink-soft">
                   {c.title}
                 </div>
-                <ChartRenderer spec={c} />
+                {c.code ? (
+                  <ArtifactViewer
+                    spec={c}
+                    minHeight={320}
+                    mountDelay={i * 400}
+                  />
+                ) : (
+                  <div className="flex h-[320px] items-center justify-center px-4 text-center text-xs leading-relaxed text-muted">
+                    （静态报告暂不渲染交互图表，完整交互渲染请查看分析页）
+                  </div>
+                )}
               </div>
             ))}
           </div>

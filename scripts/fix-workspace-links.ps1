@@ -26,11 +26,7 @@ if (-not $SkipInstall) {
 }
 
 $pairs = @(
-  @{ Link = "$root\apps\web\node_modules\@insightflow\artifact-schema"; Target = "$root\packages\artifact-schema" },
-  @{ Link = "$root\apps\web\node_modules\@insightflow\chart-schema";  Target = "$root\packages\chart-schema" },
-  @{ Link = "$root\apps\web\node_modules\@insightflow\shared-types"; Target = "$root\packages\shared-types" },
-  @{ Link = "$root\packages\shared-types\node_modules\@insightflow\chart-schema"; Target = "$root\packages\chart-schema" },
-  @{ Link = "$root\packages\chart-schema\node_modules\@insightflow\shared-types"; Target = "$root\packages\shared-types" }
+  @{ Link = "$root\apps\web\node_modules\@insightflow\artifact-schema"; Target = "$root\packages\artifact-schema" }
 )
 
 Write-Host "[2/2] 修复 workspace 链接（复制替代 junction）..."
