@@ -17,7 +17,7 @@
   <meta
     http-equiv="Content-Security-Policy"
     content="default-src 'self';
-             script-src 'self' 'unsafe-inline' blob:;
+             script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval';
              style-src 'self' 'unsafe-inline';
              img-src 'self' data: blob:;
              font-src 'self' data:;
@@ -27,8 +27,8 @@
     {
       "imports": {
         "react": "/_artifacts/vendor/react.js",
-        "react/jsx-runtime": "/_artifacts/vendor/react-jsx-runtime.js",
-        "react-dom/client": "/_artifacts/vendor/react-dom-client.js",
+        "react/jsx-runtime": "/_artifacts/vendor/react.js",
+        "react-dom/client": "/_artifacts/vendor/react.js",
         "echarts": "/_artifacts/vendor/echarts.js"
       }
     }
@@ -180,7 +180,7 @@
           js = await compileTsx(code);
         } catch (err) {
           reportError(err);
-          return;
+          return false;
         }
 
         // 2) 通过 blob URL 动态 import（import 由 importmap 解析，走白名单）
@@ -189,7 +189,7 @@
           objectUrl = URL.createObjectURL(
             new Blob([js], { type: "text/javascript" })
           );
-          setStatus("② 导入依赖（react / echarts via esm.sh）…");
+          setStatus("② 导入依赖（react / echarts via importmap）…");
           const mod = await import(/* webpackIgnore: true */ objectUrl);
           const App = mod && (mod.default || mod.App);
           if (typeof App !== "function") {
@@ -206,13 +206,15 @@
             ReactMod.createElement(App, { data, theme: theme || "light" })
           );
 
-          // 3) 等首帧渲染完成后上报高度
+          // 3) 等首帧渲染完成后上报高度（React commit 由 createRoot 调度，
+          //    不主动清空 rootEl，避免误删已提交的 DOM）
           rafId = requestAnimationFrame(() => {
-            rootEl.innerHTML = "";
             post({ type: "ready", height: measureHeight() });
           });
+          return true;
         } catch (err) {
           reportError(err);
+          return false;
         }
       }
 
@@ -261,6 +263,47 @@
       });
 
       post({ type: "ready", height: measureHeight() });
+
+      // ---- Standalone 模式（P2 截图服务）----
+      // 顶层打开且 URL 带 ?spec=<base64url(JSON)> 时，不依赖父页面 postMessage，
+      // 直接自渲染（供后端 Playwright 无头截图 / 报告快照）。
+      // 完成后设置 window.__ARTIFACT_DONE，供外部轮询。
+      const specParam = new URLSearchParams(location.search).get("spec");
+      if (specParam) {
+        (async () => {
+          let done;
+          try {
+            const raw = atob(
+              specParam.replace(/-/g, "+").replace(/_/g, "/")
+            );
+            const msg = JSON.parse(decodeURIComponent(
+              Array.from(raw)
+                .map((c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0"))
+                .join("")
+            ));
+            const ok = await mount(msg);
+            if (ok) {
+              // 再等一拍让 React commit / echarts 首帧完成
+              await new Promise((r) => setTimeout(r, 120));
+              done = { ok: true, height: measureHeight() };
+            } else {
+              const errText = rootEl ? rootEl.innerText : "";
+              done = {
+                ok: false,
+                error:
+                  "mount 返回失败" +
+                  (errText ? "：" + errText.slice(0, 400) : "（页面无错误提示）"),
+              };
+            }
+          } catch (err) {
+            done = {
+              ok: false,
+              error: String((err && err.message) || err),
+            };
+          }
+          window.__ARTIFACT_DONE = done;
+        })();
+      }
     })();
   </script>
 </body>

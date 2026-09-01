@@ -39,7 +39,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="space-y-12">
+    <div className="mx-auto max-w-6xl space-y-12">
       {/* Hero */}
       <section className="relative overflow-hidden rounded-[28px] border border-line bg-surface px-7 py-12 sm:px-12 sm:py-16">
         <div
@@ -61,8 +61,8 @@ export default function HomePage() {
             把洞察交给自己。
           </h1>
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-ink-soft">
-            InsightFlow 用本地大模型理解你的自然语言提问，自动完成查询、分析与可视化，
-            并生成一份可解释、可复核、可导出的分析报告。数据始终留在你的机器上。
+            InsightFlow 用大模型理解你的自然语言提问，自动完成查询、分析与可视化，
+            并生成一份可解释、可复核、可导出的分析报告。
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <button className="btn btn-primary" onClick={() => setImportOpen(true)}>
@@ -79,7 +79,7 @@ export default function HomePage() {
             <span className="tag bg-surface-2 text-ink-soft">SQL + Python 双引擎</span>
             <span className="tag bg-surface-2 text-ink-soft">2D / 3D 可视化</span>
             <span className="tag bg-surface-2 text-ink-soft">可解释报告</span>
-            <span className="tag bg-surface-2 text-ink-soft">数据不出域</span>
+            <span className="tag bg-surface-2 text-ink-soft">支持私有化部署</span>
           </div>
         </div>
       </section>
@@ -120,7 +120,16 @@ export default function HomePage() {
             <div className="eyebrow">你的工作台</div>
             <h2 className="mt-1 font-display text-2xl font-bold text-ink">数据集</h2>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Link
+              href="/datasets"
+              className="btn-quiet rounded-lg px-3 py-2 text-sm font-medium"
+            >
+              查看全部
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
             <button className="btn btn-ghost" onClick={() => setConnectOpen(true)}>
               连接数据库
             </button>

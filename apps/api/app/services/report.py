@@ -310,17 +310,27 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
     )
 
     # charts: render container divs (echarts) or a table fallback for r3f.
-    # Agent2UI: ArtifactSpec（含 code）在静态导出中以占位呈现（P2 截图服务将替换为 PNG 快照）。
+    # Agent2UI: ArtifactSpec（含 code）优先渲染 P2 截图服务生成的 PNG 快照，
+    # 没有快照时回退到占位（交互渲染请查看分析页）。
     chart_blocks: list[str] = []
     non_r3f: list[dict[str, Any]] = []
     idx = 0
     for spec in charts:
         if spec.get("code"):
-            chart_blocks.append(
-                f"<div class='evidence-block'><h3>{esc(spec.get('title','AI 图表'))}</h3>"
-                "<p class='summary'>AI 生成的可交互图表（TSX），PDF/HTML 静态导出中暂以占位呈现；"
-                "完整交互渲染请查看分析页，报告截图功能将于 P2 提供。</p></div>"
-            )
+            snap = spec.get("_snapshot")
+            if snap:
+                chart_blocks.append(
+                    f"<div class='evidence-block'><h3>{esc(spec.get('title','AI 图表'))}</h3>"
+                    f"<img src='{snap}' alt='{esc(spec.get('title','AI 图表'))}' "
+                    "style='max-width:100%;height:auto;border-radius:10px;border:1px solid var(--line);'/>"
+                    "</div>"
+                )
+            else:
+                chart_blocks.append(
+                    f"<div class='evidence-block'><h3>{esc(spec.get('title','AI 图表'))}</h3>"
+                    "<p class='summary'>AI 生成的可交互图表（TSX），静态导出中暂以占位呈现；"
+                    "完整交互渲染请查看分析页。</p></div>"
+                )
             continue
         if spec.get("renderer") == "r3f":
             cols = spec.get("columns") or []

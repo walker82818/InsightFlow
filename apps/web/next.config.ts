@@ -38,6 +38,17 @@ const nextConfig: NextConfig = {
       { source: "/health/:path*", destination: `${BACKEND}/health/:path*` },
     ];
   },
+  // Artifact runtime（/_artifacts/*）会被严格隔离的 sandboxed iframe（opaque origin）
+  // 加载：esbuild.wasm fetch 与 vendor ESM import 在 opaque origin 下均为跨源请求，
+  // 必须放行 CORS（*），否则 artifact 渲染永远失败（P1 遗留问题）。
+  async headers() {
+    return [
+      {
+        source: "/_artifacts/:path*",
+        headers: [{ key: "Access-Control-Allow-Origin", value: "*" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

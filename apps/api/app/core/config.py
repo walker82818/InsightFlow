@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
+    # CORS allowed origins（部署时用 CORS_ORIGINS 覆盖，JSON 数组格式：
+    # CORS_ORIGINS=["http://localhost:3000","https://your.domain"])
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
     # PostgreSQL (async)
     database_url: str = (
         "postgresql+asyncpg://insightflow:insightflow@localhost:5432/insightflow"
@@ -69,6 +76,9 @@ class Settings(BaseSettings):
     # 全局分析墙钟超时（秒）：兜底防止 LLM 慢/死循环导致 SSE 无限挂起。
     # 单个工具调用另有 sandbox_timeout 限制；此项覆盖整条 pipeline。
     agent_total_timeout: int = 180
+    # 单次 LLM 调用超时（秒）：防止偶发 API 挂起（网络抖动 / 服务端慢）吞掉整条
+    # pipeline 的墙钟预算——历史失败案例中单次调用挂起直接耗尽 180s。
+    llm_call_timeout: int = 120
 
     # Python sandbox (Docker) — overrides in .env if needed
     sandbox_memory: str = "512m"
@@ -81,6 +91,11 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     small_model: str = "deepseek-chat"
     large_model: str = "deepseek-reasoner"
+
+    # Artifact 无头截图（P2）：主应用 runtime.html 地址与导出默认截图宽度。
+    # 本地开发默认指向 web dev server；容器/部署时改为主应用地址。
+    artifact_runtime_url: str = "http://127.0.0.1:3000/_artifacts/runtime.html"
+    artifact_shot_width: int = 960
 
     # Trace cost estimation (Phase 6): rough price per 1K tokens (USD).
     trace_cost_per_1k_prompt: float = 0.001

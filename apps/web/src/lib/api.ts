@@ -469,6 +469,26 @@ export async function repairArtifact(
   return body.spec as ArtifactSpec;
 }
 
+/** 让后端 Playwright 渲染 ArtifactSpec 并返回 PNG（「保存为图片」/ 报告快照）。 */
+export async function shotArtifact(spec: ArtifactSpec): Promise<Blob> {
+  const res = await apiFetch(`${API_BASE}/api/v1/artifacts/shot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      code: spec.code,
+      data: spec.data ?? null,
+      theme: (spec as { theme?: string }).theme ?? "light",
+      width: 960,
+      title: spec.title ?? "",
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`截图失败 (${res.status})${text ? `：${text.slice(0, 120)}` : ""}`);
+  }
+  return res.blob();
+}
+
 // ---- Phase 7: report ----
 
 /** Race a promise against a timeout so a hanging request can't spin forever. */

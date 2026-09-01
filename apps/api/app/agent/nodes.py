@@ -356,9 +356,10 @@ async def analysis_node(state: AgentState) -> dict[str, Any]:
     prior_msgs = state.get("analysis_messages") or []
     is_continue = bool(prior_msgs) and (state.get("retries", 0) or 0) >= 1 and not review.get("passed", True)
 
-    # ④ 沙箱门控：无隔离沙箱时，绝对不暴露 python_execute（否则落到服务器同权限本地进程
-    # 执行任意代码 = RCE）。仅给 SQL 工具并明确告知模型。
-    python_ok = python_sandbox_isolated()
+    # ④ 沙箱门控：无隔离沙箱时默认不暴露 python_execute（否则落到服务器同权限本地进程
+    # 执行任意代码 = RCE）。仅当显式开启 sandbox_allow_local_fallback（开发机明确信任
+    # 输入）时才放行本地降级，与 run_python_tool 的降级分支保持一致。
+    python_ok = python_sandbox_isolated() or settings.sandbox_allow_local_fallback
     tools = [SQL_TOOL_SPEC]
     if python_ok:
         tools.append(PYTHON_TOOL_SPEC)

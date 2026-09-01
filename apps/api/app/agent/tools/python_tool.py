@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -213,6 +214,45 @@ async def _run_local(
     return _read_result(workdir)
 
 
+# Windows 下 uvicorn（尤其 --reload）使用 SelectorEventLoop，不支持
+# asyncio.create_subprocess_exec → 起 docker / 本地 runner 子进程会抛空消息的
+# NotImplementedError。因此 Python 工具统一在专用常驻事件循环线程中执行：
+# asyncio.new_event_loop() 在 Windows 默认即 ProactorEventLoop，可正常起子进程。
+_executor_loop: asyncio.AbstractEventLoop | None = None
+_executor_loop_lock = threading.Lock()
+
+
+def _get_executor_loop() -> asyncio.AbstractEventLoop:
+    global _executor_loop
+    with _executor_loop_lock:
+        if _executor_loop is None or _executor_loop.is_closed():
+            loop = asyncio.new_event_loop()
+            threading.Thread(
+                target=loop.run_forever,
+                name="python-executor",
+                daemon=True,
+            ).start()
+            _executor_loop = loop
+        return _executor_loop
+
+
+async def _run_tool_core(
+    datasets: list[dict[str, Any]],
+    code: str,
+    timeout: int,
+) -> dict[str, Any]:
+    data_paths = [_resolve_file(d["storage_path"]) for d in datasets]
+    data_path = data_paths[0]
+    tables = {d["table_name"]: p for d, p in zip(datasets, data_paths)}
+    workdir = tempfile.mkdtemp(prefix="insightflow_sbx_")
+    try:
+        if python_sandbox_isolated():
+            return await _run_docker(data_path, code, timeout, workdir, tables)
+        return await _run_local(data_path, code, timeout, workdir, tables)
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 async def run_python_tool(
     datasets: list[dict[str, Any]],
     code: str,
@@ -243,13 +283,18 @@ async def run_python_tool(
             "python sandbox image missing; running LLM-generated code as a local "
             "subprocess at server privilege (sandbox_allow_local_fallback=True) — RCE risk"
         )
-    data_paths = [_resolve_file(d["storage_path"]) for d in datasets]
-    data_path = data_paths[0]
-    tables = {d["table_name"]: p for d, p in zip(datasets, data_paths)}
-    workdir = tempfile.mkdtemp(prefix="insightflow_sbx_")
-    try:
-        if python_sandbox_isolated():
-            return await _run_docker(data_path, code, timeout, workdir, tables)
-        return await _run_local(data_path, code, timeout, workdir, tables)
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+    # 子进程（docker / 本地 runner）统一转交专用事件循环线程执行，规避 uvicorn
+    # 在 Windows 上使用 SelectorEventLoop 导致 NotImplementedError 的问题。
+    return await asyncio.to_thread(
+        _submit_to_executor, datasets, code, timeout
+    )
+
+
+def _submit_to_executor(
+    datasets: list[dict[str, Any]], code: str, timeout: int
+) -> dict[str, Any]:
+    """把工具执行提交到专用事件循环线程并等待结果（供 asyncio.to_thread 调用）。"""
+    loop = _get_executor_loop()
+    return asyncio.run_coroutine_threadsafe(
+        _run_tool_core(datasets, code, timeout), loop
+    ).result()

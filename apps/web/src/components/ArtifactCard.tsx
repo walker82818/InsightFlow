@@ -5,7 +5,7 @@ import type { ArtifactSpec } from "@insightflow/artifact-schema";
 import ArtifactViewer, {
   type ArtifactError,
 } from "@/components/ArtifactViewer";
-import { repairArtifact } from "@/lib/api";
+import { repairArtifact, shotArtifact } from "@/lib/api";
 
 /** 设计 §4：错误自愈上限（iframe 编译/渲染失败 → LLM 修复重试轮数）。 */
 const MAX_REPAIR_ATTEMPTS = 3;
@@ -27,7 +27,29 @@ export default function ArtifactCard({
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<ArtifactError | null>(null);
   const [repairing, setRepairing] = useState(false);
+  const [shooting, setShooting] = useState(false);
   const repairingRef = useRef(false);
+
+  /** 复用后端 Playwright 截图服务，把当前 artifact 保存为 PNG。 */
+  const downloadImage = useCallback(async () => {
+    if (shooting) return;
+    setShooting(true);
+    try {
+      const blob = await shotArtifact(current);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(current.title || "artifact").replace(/[\\/:*?"<>|]/g, "_")}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError({ message: `保存图片失败：${(e as Error).message}` });
+    } finally {
+      setShooting(false);
+    }
+  }, [current, shooting]);
 
   // 父级下发新 spec（新一轮分析）时整体重置
   useEffect(() => {
@@ -84,6 +106,16 @@ export default function ArtifactCard({
           {current.title || "AI 可视化"}
         </span>
         <span className="flex items-center gap-2">
+          {!error && !repairing && (
+            <button
+              onClick={downloadImage}
+              disabled={shooting}
+              className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted transition hover:border-line-strong hover:text-ink disabled:cursor-wait disabled:opacity-60"
+              title="保存为图片（后端 Playwright 渲染）"
+            >
+              {shooting ? "截图中…" : "保存为图片"}
+            </button>
+          )}
           {repairing && (
             <span className="flex items-center gap-1 text-xs text-muted">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber" />

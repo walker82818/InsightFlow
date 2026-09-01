@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from urllib.parse import quote_plus
 
 import duckdb
 
@@ -209,21 +210,36 @@ def query(sql: str, timeout: int | None = None) -> dict[str, Any]:
 
 
 def _pg_connstring(conn: dict) -> str:
-    user = conn.get("username") or ""
-    pw = conn.get("password") or ""
+    user = quote_plus(conn.get("username") or "")
+    pw = quote_plus(conn.get("password") or "")
     host = conn.get("host") or "localhost"
     port = conn.get("port") or 5432
-    dbname = conn.get("database") or ""
+    dbname = quote_plus(conn.get("database") or "")
     return f"postgresql://{user}:{pw}@{host}:{port}/{dbname}"
 
 
 def _mysql_connstring(conn: dict) -> str:
-    user = conn.get("username") or ""
-    pw = conn.get("password") or ""
+    user = quote_plus(conn.get("username") or "")
+    pw = quote_plus(conn.get("password") or "")
     host = conn.get("host") or "localhost"
     port = conn.get("port") or 3306
-    dbname = conn.get("database") or ""
+    dbname = quote_plus(conn.get("database") or "")
     return f"mysql://{user}:{pw}@{host}:{port}/{dbname}"
+
+
+# Identifiers interpolated into DuckDB SQL (schema / table names). Restrict to a
+# conservative charset so a crafted input cannot break out of the string literal
+# and inject arbitrary SQL via postgres_scan / sqlite_scan / mysql_scan.
+_IDENT_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def _assert_identifier(value: str | None, what: str) -> str:
+    value = (value or "").strip()
+    if not value or not _IDENT_RE.match(value):
+        raise DuckDBError(
+            f"invalid {what}: {value!r}; only letters, digits and underscore are allowed"
+        )
+    return value
 
 
 def register_db_dataset(
@@ -242,12 +258,20 @@ def register_db_dataset(
         con.execute("SET enable_external_access = true;")
         con.execute("SET lock_configuration = false;")
         dt = (db_type or "").lower()
+        # 用户输入的表名/schema 一律白名单校验后再拼进 SQL，防止注入。
+        table = _assert_identifier(table, "table name")
+        schema = _assert_identifier(schema or "public", "schema name")
         if dt == "postgres":
             con.execute("INSTALL postgres; LOAD postgres;")
-            src = f"postgres_scan('{_pg_connstring(conn)}', '{schema or 'public'}', '{table}')"
+            src = f"postgres_scan('{_pg_connstring(conn)}', '{schema}', '{table}')"
         elif dt == "sqlite":
             con.execute("INSTALL sqlite; LOAD sqlite;")
-            src = f"sqlite_scan('{conn.get('database') or ''}', '{table}')"
+            db_path = conn.get("database") or ""
+            if not db_path or "'" in db_path:
+                raise DuckDBError(
+                    "invalid sqlite database path: must not be empty or contain quotes"
+                )
+            src = f"sqlite_scan('{db_path}', '{table}')"
         elif dt == "mysql":
             con.execute("INSTALL mysql; LOAD mysql;")
             src = f"mysql_scan('{_mysql_connstring(conn)}', '{table}')"

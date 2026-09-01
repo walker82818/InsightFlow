@@ -261,6 +261,8 @@ async def run_analysis(
 
     started = datetime.utcnow()
     final: Any = None
+    # 收集本 run 已产出的事件：超时/异常路径也用它持久化诊断信息（否则 trace 为空）。
+    seen_events: list[dict] = []
     try:
         # Live streaming: nodes push every event onto this queue via _ev(), so we
         # can yield events to the SSE client as soon as they are produced instead
@@ -299,6 +301,7 @@ async def run_analysis(
                 ev = await queue.get()
                 if ev is _STREAM_SENTINEL:
                     break
+                seen_events.append(ev)
                 if ev.get("type") == "agent_activity":
                     agent = ev.get("agent", "")
                     yield {
@@ -458,6 +461,13 @@ async def run_analysis(
                 run.status = "error"
                 run.latency_ms = latency_ms
                 run.finished_at = finished
+                # 故障诊断：即使失败也持久化已发生的事件（steps/tool_calls），
+                # 否则超时/崩溃时 trace 为空，无法定位卡在哪一步。
+                if seen_events:
+                    steps, tool_calls = _build_trace(seen_events)
+                    run.tool_calls = len(tool_calls)
+                    db.add_all([AgentStep(run_id=run_id, **s) for s in steps])
+                    db.add_all([ToolCall(run_id=run_id, **tc) for tc in tool_calls])
             await db.commit()
         logger.exception("analysis %s failed", analysis_id)
         yield {

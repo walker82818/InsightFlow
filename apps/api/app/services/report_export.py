@@ -285,6 +285,10 @@ def render_markdown_export(data: dict[str, Any]) -> str:
         for i, spec in enumerate(charts, 1):
             st = spec.get("type") or ""
             t = spec.get("title") or f"图表 {i}"
+            snap = spec.get("_snapshot")
+            if snap:
+                add(f"### {t}\n![]({snap})\n")
+                continue
             rows = spec.get("rows") or []
             if rows:
                 add(f"### {t}（{st}，{len(rows)} 条）")

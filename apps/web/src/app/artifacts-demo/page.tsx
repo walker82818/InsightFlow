@@ -149,7 +149,7 @@ export default function ArtifactsDemoPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-6xl space-y-8">
       <div>
         <div className="eyebrow">Agent2UI · P0 冒烟</div>
         <h1 className="mt-1 font-display text-2xl font-bold text-ink">
@@ -162,7 +162,7 @@ export default function ArtifactsDemoPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        {FIXTURES.map((f) => (
+        {FIXTURES.map((f, i) => (
           <section key={f.id} className="card flex flex-col p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-display text-sm font-semibold text-ink">
@@ -175,6 +175,7 @@ export default function ArtifactsDemoPage() {
             <ArtifactViewer
               spec={f.spec}
               minHeight={180}
+              mountDelay={i * 3000}
               onError={(e) =>
                 setErrors((prev) => ({ ...prev, [f.id]: e }))
               }

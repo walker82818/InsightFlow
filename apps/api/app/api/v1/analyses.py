@@ -394,8 +394,11 @@ async def export_report(
     # report.content_json may be None/legacy; normalize to dict.
     content = report.content_json if isinstance(report.content_json, dict) else {}
 
+    from app.services.artifact_shooter import snapshot_charts
+
     if format == "markdown":
         data = await build_export_data(session, analysis_id, content)
+        data["charts"] = await snapshot_charts(data.get("charts") or [])
         md = render_markdown_export(data)
         disposition = "inline" if inline else "attachment"
         filename = f"report_{analysis_id}.md"
@@ -409,6 +412,7 @@ async def export_report(
     html_doc = report.html
     try:
         data = await build_export_data(session, analysis_id, content)
+        data["charts"] = await snapshot_charts(data.get("charts") or [])
         html_doc = render_html_export(data)
     except Exception:  # noqa: BLE001 - fall back to the stored HTML on any error
         if not html_doc:

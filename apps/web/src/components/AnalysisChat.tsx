@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   createAnalysis,
   runAnalysisStream,
@@ -26,11 +27,46 @@ import Markdown from "@/components/Markdown";
 type Tab = "chat" | "report" | "trace";
 type Status = "idle" | "running" | "completed" | "error";
 
-const EXAMPLES = [
-  "各地区的销售额对比如何？",
-  "用户留存率随时间怎么变化？",
-  "哪些因素最影响转化？",
-  "给我一份完整的分析报告",
+const EXAMPLES: { q: string; icon: ReactNode; hint: string }[] = [
+  {
+    q: "各地区的销售额对比如何？",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 21h18M6 18v-5M11 18V7M16 18v-9M21 18V4" />
+      </svg>
+    ),
+    hint: "分组对比",
+  },
+  {
+    q: "用户留存率随时间怎么变化？",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 17l5-6 4 3 5-8 4 5" />
+        <path d="M3 21h18" />
+      </svg>
+    ),
+    hint: "趋势洞察",
+  },
+  {
+    q: "哪些因素最影响转化？",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="4" />
+      </svg>
+    ),
+    hint: "归因分析",
+  },
+  {
+    q: "给我一份完整的分析报告",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+        <path d="M14 2v6h6M9 13h6M9 17h6" />
+      </svg>
+    ),
+    hint: "AI 报告",
+  },
 ];
 
 const STATUS_META: Record<Status, { label: string; cls: string }> = {
@@ -257,7 +293,7 @@ export default function AnalysisChat({
   const st = STATUS_META[status];
 
   return (
-    <section className="card flex h-[72vh] min-h-[520px] flex-col overflow-hidden">
+    <section className="card flex h-full min-h-[560px] flex-col overflow-hidden">
       {/* Tabs */}
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <div className="flex gap-1 rounded-xl bg-paper-2 p-1">
@@ -299,7 +335,7 @@ export default function AnalysisChat({
         {tab === "chat" && (
           <div className="flex h-full flex-col">
             {/* Selected datasets bar */}
-            <div className="flex items-center gap-2 border-b border-line bg-paper-2/40 px-4 py-2">
+            <div className="flex items-center gap-2 border-b border-line px-4 py-2">
               <span className="shrink-0 text-xs font-semibold text-muted">
                 已选表
               </span>
@@ -307,7 +343,7 @@ export default function AnalysisChat({
                 {datasetIds.map((did) => (
                   <span
                     key={did}
-                    className="inline-flex max-w-[16rem] items-center gap-1 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink"
+                    className="inline-flex max-w-[16rem] items-center gap-1 rounded-md bg-paper-2 py-0.5 pl-2 pr-1 text-xs text-ink-soft"
                     title={nameOf(did)}
                   >
                     <span className="truncate">{nameOf(did)}</span>
@@ -317,7 +353,7 @@ export default function AnalysisChat({
                       onClick={() =>
                         onRemoveDataset ? onRemoveDataset(did) : undefined
                       }
-                      className="text-faint transition hover:text-danger"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-faint transition hover:bg-white hover:text-danger"
                     >
                       ×
                     </button>
@@ -327,14 +363,14 @@ export default function AnalysisChat({
               <button
                 type="button"
                 onClick={() => setPickerOpen((v) => !v)}
-                className="shrink-0 rounded-lg border border-dashed border-line px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-accent-strong"
+                className="shrink-0 rounded-md bg-paper-2 px-2 py-1 text-xs text-muted transition hover:text-accent-strong"
               >
                 + 追加数据集
               </button>
             </div>
 
             {pickerOpen && (
-              <div className="border-b border-line bg-paper-2/40 px-4 py-3">
+              <div className="border-b border-line px-4 py-3">
                 <div className="flex flex-wrap gap-1.5">
                   {allDatasets
                     .filter((d) => !datasetIds.includes(d.id))
@@ -345,7 +381,7 @@ export default function AnalysisChat({
                         onClick={() => {
                           onAddDataset?.(d.id);
                         }}
-                        className="rounded-lg border border-line bg-surface px-2 py-1 text-xs text-muted transition hover:border-accent hover:text-accent-strong"
+                        className="rounded-md bg-paper-2 px-2 py-1 text-xs text-ink-soft transition hover:bg-paper-2/70 hover:text-accent-strong"
                       >
                         + {d.name}
                       </button>
@@ -362,29 +398,49 @@ export default function AnalysisChat({
 
             <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
               {events.length === 0 && !loading && (
-                <div className="flex h-full flex-col items-center justify-center text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <div className="flex h-full flex-col items-center justify-center px-8 py-10 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-soft via-accent-soft to-paper-2 text-accent shadow-sm ring-1 ring-accent/10">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                     </svg>
                   </div>
-                  <div className="mt-4 font-display text-lg font-semibold text-ink">
-                    想从数据里知道点什么？
-                  </div>
-                  <p className="mt-1 max-w-sm text-sm text-muted">
-                    用自然语言提问，Agent 会自动规划、查询、绘图，并生成报告。
+                  <h2 className="mt-6 font-display text-3xl font-bold leading-tight tracking-tight text-ink">
+                    问点什么，开始分析
+                  </h2>
+                  <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted">
+                    用自然语言描述问题，Agent 会自动规划、查询、可视化，并沉淀为完整报告。
                   </p>
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  <div className="mt-9 grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
                     {EXAMPLES.map((ex) => (
                       <button
-                        key={ex}
-                        onClick={() => send(ex)}
-                        className="tag hover:border-accent hover:text-accent-strong"
+                        key={ex.q}
+                        type="button"
+                        onClick={() => send(ex.q)}
+                        className="group flex items-center gap-3.5 rounded-2xl border border-line bg-surface px-4 py-3.5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[0_12px_32px_-16px_rgba(217,83,46,0.35)]"
                       >
-                        {ex}
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent transition-colors duration-200 group-hover:bg-accent group-hover:text-white">
+                          {ex.icon}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium leading-snug text-ink-soft group-hover:text-ink">
+                            {ex.q}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-faint">
+                            {ex.hint}
+                          </span>
+                        </span>
+                        <span
+                          className="text-faint transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-accent"
+                          aria-hidden
+                        >
+                          →
+                        </span>
                       </button>
                     ))}
                   </div>
+                  <p className="mt-8 text-xs text-faint">
+                    · 支持追加多张数据表 · 分析侧重 · 历史回溯
+                  </p>
                 </div>
               )}
               {events.map((ev, i) => (
@@ -408,14 +464,14 @@ export default function AnalysisChat({
             </div>
 
             {/* Composer */}
-            <div className="border-t border-line p-3">
+            <div className="border-t border-line px-4 pb-4 pt-3">
               <button
                 type="button"
                 onClick={() => setSeedOpen((v) => !v)}
-                className="mb-2 flex w-full items-center gap-2 text-xs text-muted transition hover:text-ink"
+                className="mb-2.5 flex w-full items-center gap-2 text-xs text-muted transition hover:text-ink"
               >
                 <span
-                  className={`inline-flex h-4 w-4 items-center justify-center rounded bg-surface-2 text-faint transition-transform duration-200 ${
+                  className={`inline-flex h-4 w-4 items-center justify-center rounded bg-surface text-faint transition-transform duration-200 ${
                     seedOpen ? "rotate-180" : ""
                   }`}
                   aria-hidden
@@ -434,16 +490,16 @@ export default function AnalysisChat({
 
               {seedOpen && (
                 <textarea
-                  className="input mb-2 min-h-[52px] resize-none"
+                  className="input mb-3 min-h-[52px] resize-none"
                   value={seedText}
                   onChange={(e) => setSeedText(e.target.value)}
                   placeholder="例如：重点关注用户留存与高价值人群特征"
                 />
               )}
 
-              <div className="flex items-end gap-2">
+              <div className="rounded-2xl border border-line bg-surface shadow-sm transition focus-within:border-accent/50 focus-within:shadow-[0_0_0_4px_var(--color-accent-ring)]">
                 <textarea
-                  className="input min-h-[44px] flex-1 resize-none"
+                  className="w-full resize-none rounded-t-2xl bg-transparent px-4 py-3.5 text-[15px] leading-relaxed text-ink placeholder:text-faint focus:outline-none"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -456,19 +512,21 @@ export default function AnalysisChat({
                   placeholder="描述你的问题，例如：上季度各渠道的转化情况"
                   rows={1}
                 />
-                <button
-                  className="btn btn-primary h-[44px]"
-                  onClick={() => {
-                    send(query);
-                    setQuery("");
-                  }}
-                  disabled={loading || !query.trim()}
-                >
-                  发送
-                </button>
-              </div>
-              <div className="mt-1.5 px-1 text-xs text-faint">
-                Enter 发送 · Shift+Enter 换行
+                <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
+                  <span className="px-1.5 text-[11px] text-faint">
+                    Enter 发送 · Shift+Enter 换行
+                  </span>
+                  <button
+                    className="btn btn-primary !px-5"
+                    onClick={() => {
+                      send(query);
+                      setQuery("");
+                    }}
+                    disabled={loading || !query.trim()}
+                  >
+                    发送
+                  </button>
+                </div>
               </div>
             </div>
           </div>

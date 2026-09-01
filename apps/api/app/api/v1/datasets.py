@@ -8,6 +8,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -83,8 +84,9 @@ async def upload_dataset(
         raise HTTPException(status_code=500, detail=f"storage failed: {exc}") from exc
 
     try:
-        df = read_dataframe(data, ext)
-        result = profile_dataframe(df)
+        # 文件解析与画像都是 CPU 密集的 pandas 运算，丢到线程池避免阻塞 event loop。
+        df = await asyncio.to_thread(read_dataframe, data, ext)
+        result = await asyncio.to_thread(profile_dataframe, df)
     except ProfilingError as exc:
         # Roll back stored bytes on profiling failure.
         await _storage().delete(storage_key)
@@ -137,15 +139,17 @@ async def connect_database(
         "table": payload.table,
     }
     try:
-        info = duckdb.register_db_dataset(
+        # DB 扫描 / 采样 / 画像均为同步阻塞调用，丢到线程池避免阻塞 event loop。
+        info = await asyncio.to_thread(
+            duckdb.register_db_dataset,
             dataset_id,
             payload.db_type,
             conn,
             payload.table,
             payload.schema or "public",
         )
-        df = duckdb.sample_table(info["table"])
-        prof = profile_dataframe(df)
+        df = await asyncio.to_thread(duckdb.sample_table, info["table"])
+        prof = await asyncio.to_thread(profile_dataframe, df)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=422, detail=f"连接或导入数据库失败：{exc}"

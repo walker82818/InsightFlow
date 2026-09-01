@@ -58,12 +58,10 @@ export default function RootLayout({
                 工作台
               </a>
               <a
-                href="https://github.com"
-                target="_blank"
-                rel="noreferrer"
-                className="btn-quiet hidden rounded-lg px-3 py-2 font-medium sm:inline-flex"
+                href="/datasets"
+                className="btn-quiet rounded-lg px-3 py-2 font-medium"
               >
-                文档
+                数据集
               </a>
               <span className="ml-1 hidden items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-muted sm:inline-flex">
                 <span className="h-2 w-2 rounded-full bg-pine" />
@@ -73,11 +71,12 @@ export default function RootLayout({
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-5 pb-24 pt-8">{children}</main>
+        {/* 宽度由各页面自管：普通页用 max-w-6xl 容器，对话工作台可全宽 */}
+        <main className="w-full px-5 pb-24 pt-8">{children}</main>
         <footer className="border-t border-line bg-paper">
           <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-5 py-6 text-xs text-faint sm:flex-row">
             <span>InsightFlow · 让数据分析像对话一样自然</span>
-            <span>由本地大模型驱动 · 数据不出域</span>
+            <span>由 AI 大模型驱动 · 支持私有化部署</span>
           </div>
         </footer>
       </body>

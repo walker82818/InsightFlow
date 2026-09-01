@@ -7,6 +7,7 @@ immediately on the dataset detail page.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -28,8 +29,13 @@ async def persist_insights(
     max_insights: int = 12,
 ) -> int:
     """Compute + persist insights. Returns the number stored."""
-    insights = insight_node.run_insight_node(
-        df, schema_json, base_profile, max_insights=max_insights
+    # run_insight_node 是 CPU 密集的 pandas 计算，丢到线程池避免阻塞 event loop。
+    insights = await asyncio.to_thread(
+        insight_node.run_insight_node,
+        df,
+        schema_json,
+        base_profile,
+        max_insights=max_insights,
     )
 
     await session.execute(delete(Insight).where(Insight.dataset_id == dataset_id))

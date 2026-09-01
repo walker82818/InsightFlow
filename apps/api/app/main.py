@@ -1,10 +1,12 @@
 """InsightFlow FastAPI application entrypoint."""
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api.v1 import api_router
@@ -13,10 +15,7 @@ from app.db.base import Base
 from app.db.session import engine
 from app.models import Analysis, Dataset, DatasetColumn, User  # noqa: F401  (register models)
 
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+logger = logging.getLogger("insightflow")
 
 
 @asynccontextmanager
@@ -37,13 +36,25 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(api_router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """全局兜底异常处理：完整异常写日志，客户端只拿到通用 500，不泄漏内部细节。"""
+    logger.exception(
+        "unhandled error on %s %s", request.method, request.url.path, exc_info=exc
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal server error"},
+    )
 
 
 @app.get("/health", tags=["health"])

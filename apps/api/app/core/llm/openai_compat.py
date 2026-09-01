@@ -1,6 +1,7 @@
 """OpenAI-compatible chat client (DeepSeek / Qwen / 通义 / OpenAI)."""
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -93,7 +94,17 @@ class OpenAICompatibleClient(LLMClient):
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
 
-        resp = await self._client.chat.completions.create(**kwargs)
+        # 单次调用超时：偶发 API 挂起时快速失败（抛 RuntimeError，由 nodes 捕获并
+        # 作为错误事件返回），避免一次挂起耗尽整条 pipeline 的墙钟预算。
+        try:
+            resp = await asyncio.wait_for(
+                self._client.chat.completions.create(**kwargs),
+                timeout=settings.llm_call_timeout,
+            )
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError(
+                f"LLM 调用超时（超过 {settings.llm_call_timeout}s）"
+            ) from exc
         choice = resp.choices[0]
         message = choice.message
 

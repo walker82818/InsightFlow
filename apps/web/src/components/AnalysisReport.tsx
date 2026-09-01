@@ -233,7 +233,7 @@ export default function AnalysisReportView({ report }: { report: AnalysisReport 
       )}
 
       <p className="border-t border-line pt-4 text-xs text-faint">
-        本报告由本地大模型基于本次分析结果自动生成，仅供参考，请结合业务实际判断。
+        本报告由 AI 大模型基于本次分析结果自动生成，仅供参考，请结合业务实际判断。
       </p>
     </article>
   );

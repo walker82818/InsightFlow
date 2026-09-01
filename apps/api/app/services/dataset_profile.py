@@ -13,6 +13,7 @@ the LLM-backed semantic suggestion can run in a background task.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -34,7 +35,8 @@ async def persist_profile(
     base_profile: dict[str, Any],
 ) -> dict[str, Any]:
     """Build + persist the 2.0 profile. Returns the schema_json for semantic use."""
-    payload = profiler2.build_profile(df, base_profile)
+    # build_profile 是 CPU 密集的 pandas 计算，丢到线程池避免阻塞 event loop。
+    payload = await asyncio.to_thread(profiler2.build_profile, df, base_profile)
 
     existing = (
         await session.execute(

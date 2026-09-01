@@ -7,6 +7,8 @@
     "dev": "pnpm --filter @insightflow/web dev",
     "build": "pnpm --filter @insightflow/web build",
     "lint": "pnpm --filter @insightflow/web lint",
+    "typecheck": "pnpm --filter @insightflow/web typecheck",
+    "test": "pnpm --filter @insightflow/web test --if-present && pnpm --filter @insightflow/api test --if-present",
     "api:install": "pnpm --filter @insightflow/api install",
     "api:dev": "pnpm --filter @insightflow/api dev"
   },
