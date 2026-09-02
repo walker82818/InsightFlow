@@ -27,9 +27,6 @@ x-api-common: &api-common
     MINIO_BUCKET: ${MINIO_BUCKET:-insightflow}
     SANDBOX_ALLOW_LOCAL_FALLBACK: ${SANDBOX_ALLOW_LOCAL_FALLBACK:-false}
     SANDBOX_DOCKER_IMAGE: insightflow-sandbox:latest
-    LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-    LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
-    LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
   volumes:
     # DuckDB file + local uploads persist here across restarts.
     - insightflow_data:/app/data

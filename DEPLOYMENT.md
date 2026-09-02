@@ -65,7 +65,6 @@ docker compose ps
 | `LLM_SMALL_MODEL` / `LLM_LARGE_MODEL` | 小/大模型 | `deepseek-chat` / `deepseek-reasoner` |
 | `POSTGRES_USER/PASSWORD/DB` | 数据库账号密码库名 | `insightflow` |
 | `STORAGE_BACKEND` | 对象存储：`local` 或 `minio` | `local` |
-| `LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST` | 可观测性（留空则关闭） | 空 |
 
 > 生产环境建议改掉 `POSTGRES_PASSWORD` 默认值，并妥善保管 `LLM_API_KEY`。
 

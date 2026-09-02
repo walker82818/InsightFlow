@@ -96,11 +96,6 @@ class Settings(BaseSettings):
     trace_cost_per_1k_prompt: float = 0.001
     trace_cost_per_1k_completion: float = 0.002
 
-    # Optional Langfuse observability (Phase 6). Leave empty to disable.
-    langfuse_public_key: str = ""
-    langfuse_secret_key: str = ""
-    langfuse_host: str = "https://cloud.langfuse.com"
-
 
 @lru_cache
 def get_settings() -> Settings:

@@ -5,9 +5,15 @@ Topology (design §6.1):
     START → planner → analysis → visualization → reviewer → (retry) analysis / END
 
 ``reviewer`` conditionally routes back to ``analysis`` when the review fails
-and we have retries left. State is checkpointed with an in-memory saver keyed
-by ``thread_id`` (the execution can be resumed by re-invoking with the same
-thread id — Phase 7 will swap in a PostgreSQL-backed saver).
+and we have retries left.
+
+Checkpointing: an in-memory ``MemorySaver`` keyed by ``thread_id``.
+``run_analysis`` (single_agent.py) currently generates a **fresh thread_id per
+run**, so every execution gets its own checkpoint namespace and resume is not
+exercised today. Pinning the thread_id (e.g. to ``analysis_id``) would allow
+inspecting / resuming an interrupted run, but a new run would then inherit the
+previous checkpoint — only enable that together with an explicit
+"start a new run" reset. Phase 7 will swap in a PostgreSQL-backed saver.
 """
 from __future__ import annotations
 

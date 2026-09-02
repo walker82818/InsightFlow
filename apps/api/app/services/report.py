@@ -7,6 +7,7 @@ from typing import Any
 
 from app.core.llm import ModelSize, get_llm_client
 from app.core.config import settings
+from app.services.md import codehilite_css, highlight_code, md_to_html
 
 SYSTEM_PROMPT = (
     "你是一名资深数据分析报告撰写助手。请根据给定的分析结果，撰写一份"
@@ -264,6 +265,8 @@ section h2::before{content:"";width:4px;height:18px;background:var(--brand);bord
 ul.findings,ul.recs{margin:0;padding-left:0;list-style:none;}
 ul.findings li,ul.recs li{position:relative;padding:10px 14px 10px 38px;margin-bottom:8px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;}
 ul.findings li::before{content:counter(f);counter-increment:f;position:absolute;left:12px;top:10px;width:18px;height:18px;background:var(--brand);color:#fff;border-radius:50%;font-size:12px;display:flex;align-items:center;justify-content:center;}
+ul.findings li .md p,ul.recs li .md p{margin:0;}
+ul.findings li .md,ul.recs li .md{display:inline;}
 ul.findings{counter-reset:f;}
 ul.recs li::before{content:"▸";position:absolute;left:14px;top:9px;color:var(--accent);font-weight:700;}
 .evidence-block{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;}
@@ -286,7 +289,9 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
     esc = html.escape
     title = esc(dataset_name or "数据分析") + " · 分析报告"
 
-    summary = esc(report.get("executive_summary") or "")
+    # 叙述字段由 LLM 生成，可能含 markdown（加粗 / 列表 / 行内代码），
+    # 导出时必须服务端渲染，不能原样转义，否则打印/PDF 和下载 HTML 会露出裸语法。
+    summary = md_to_html(report.get("executive_summary") or "")
     findings = report.get("key_findings") or []
     recs = report.get("recommendations") or []
     limitations = report.get("limitations")
@@ -296,14 +301,14 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
 
     findings_html = (
         "<ul class='findings'>"
-        + "".join(f"<li>{esc(f)}</li>" for f in findings)
+        + "".join(f"<li>{md_to_html(f)}</li>" for f in findings)
         + "</ul>"
         if findings
         else "<p class='summary'>（暂无）</p>"
     )
     recs_html = (
         "<ul class='recs'>"
-        + "".join(f"<li>{esc(r)}</li>" for r in recs)
+        + "".join(f"<li>{md_to_html(r)}</li>" for r in recs)
         + "</ul>"
         if recs
         else "<p class='summary'>（暂无）</p>"
@@ -358,7 +363,7 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
         inner = f"<h3>{esc(ev.get('title',''))}</h3>"
         sql = ev.get("sql")
         if sql:
-            inner += f"<pre class='code'>{esc(sql)}</pre>"
+            inner += highlight_code(str(sql), "sql")
         cols = ev.get("columns") or []
         rows = ev.get("rows") or []
         if cols and rows:
@@ -373,9 +378,7 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
         ev_blocks.append(f"<div class='evidence-block'>{inner}</div>")
     evidence_html = "\n".join(ev_blocks) if ev_blocks else "<p class='summary'>（无数据查询记录）</p>"
 
-    limits_html = (
-        f"<p class='summary'>{esc(limitations)}</p>" if limitations else ""
-    )
+    limits_html = md_to_html(limitations) if limitations else ""
 
     m = metrics
     metrics_html = (
@@ -398,7 +401,8 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>{title}</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<style>{_CSS}</style>
+<style>{_CSS}
+{codehilite_css()}</style>
 </head>
 <body>
 <div class="page">
@@ -413,7 +417,7 @@ def render_html_report(report: dict[str, Any], dataset_name: str, query: str) ->
 
   <section>
     <h2>执行摘要</h2>
-    <p class="summary">{summary}</p>
+    <div class="summary">{summary}</div>
   </section>
 
   <section>

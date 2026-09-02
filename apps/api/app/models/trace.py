@@ -27,8 +27,9 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    # ondelete=CASCADE：删除 analysis 时级联清理 run（与 evidence/report/root_cause 一致）。
     analysis_id: Mapped[str] = mapped_column(
-        String, ForeignKey("analyses.id"), index=True
+        String, ForeignKey("analyses.id", ondelete="CASCADE"), index=True
     )
     thread_id: Mapped[str] = mapped_column(String, index=True)
     status: Mapped[str] = mapped_column(String, default="running")
@@ -65,7 +66,7 @@ class AgentStep(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     run_id: Mapped[str] = mapped_column(
-        String, ForeignKey("agent_runs.id"), index=True
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True
     )
     agent: Mapped[str] = mapped_column(String, default="system")
     step_type: Mapped[str] = mapped_column(String, default="agent")
@@ -99,7 +100,7 @@ class ToolCall(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     run_id: Mapped[str] = mapped_column(
-        String, ForeignKey("agent_runs.id"), index=True
+        String, ForeignKey("agent_runs.id", ondelete="CASCADE"), index=True
     )
     tool: Mapped[str] = mapped_column(String)
     input: Mapped[Any] = mapped_column(JSON, nullable=True)

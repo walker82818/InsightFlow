@@ -12,6 +12,7 @@ from app.core.llm.base import (
     LLMClient,
     LLMMessage,
     LLMResponse,
+    LLMTimeoutError,
     ModelSize,
     ToolCall,
 )
@@ -77,6 +78,7 @@ class OpenAICompatibleClient(LLMClient):
         tool_choice: Literal["auto", "none"] = "auto",  # noqa: ARG002
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        timeout: float | None = None,
     ) -> LLMResponse:
         if not await self.is_configured():
             raise RuntimeError(
@@ -94,16 +96,20 @@ class OpenAICompatibleClient(LLMClient):
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
 
-        # 单次调用超时：偶发 API 挂起时快速失败（抛 RuntimeError，由 nodes 捕获并
-        # 作为错误事件返回），避免一次挂起耗尽整条 pipeline 的墙钟预算。
+        # 单次调用超时：偶发 API 挂起时快速失败（抛 LLMTimeoutError —— RuntimeError
+        # 的子类，既有捕获 RuntimeError 的节点逻辑不受影响），避免一次挂起耗尽整条
+        # pipeline 的墙钟预算。默认用全局 llm_call_timeout；调用方可传更短的 timeout
+        # 控制局部预算（如可视化节点的超时重试）。
+        effective_timeout = timeout if timeout is not None else settings.llm_call_timeout
         try:
             resp = await asyncio.wait_for(
                 self._client.chat.completions.create(**kwargs),
-                timeout=settings.llm_call_timeout,
+                timeout=effective_timeout,
             )
         except asyncio.TimeoutError as exc:
-            raise RuntimeError(
-                f"LLM 调用超时（超过 {settings.llm_call_timeout}s）"
+            raise LLMTimeoutError(
+                f"LLM 调用超时（超过 {effective_timeout}s）",
+                timeout=effective_timeout,
             ) from exc
         choice = resp.choices[0]
         message = choice.message

@@ -22,9 +22,9 @@
 | D5 | 基础设施 | **本地原生安装**：PostgreSQL / Redis / MinIO 本机运行；**Docker 仅用于 Python 沙箱** |
 | D6 | LLM 供应商 | **provider 抽象**，默认国内模型（DeepSeek / Qwen / 通义，均兼容 OpenAI 协议）；小模型做 Schema/简单任务，大模型做规划/总结 |
 | D7 | 鉴权 | **暂不鉴权**，固定单默认用户（users 表保留） |
-| D8 | 范围 | **完整 Phase 1-10**（含 Langfuse、Evaluation、报告导出、Docker 化与部署） |
+| D8 | 范围 | **完整 Phase 1-10**（含 Evaluation、报告导出、Docker 化与部署） |
 
-其余（FastAPI、LangGraph、DuckDB、Pandas/NumPy、ECharts 2D、SSE、MinIO 对象存储、Langfuse 可观测）与原文档一致。
+其余（FastAPI、LangGraph、DuckDB、Pandas/NumPy、ECharts 2D、SSE、MinIO 对象存储）与原文档一致。
 
 ---
 
@@ -49,7 +49,7 @@ InsightFlow 是一个面向数据分析场景的 Agentic Data Intelligence 平�
 | Persistence | Checkpoint + PostgreSQL 持久化执行状态 |
 | Visualization | ECharts 2D + react-three-fiber 3D |
 | Evaluation | 正确性、工具调用、图表、报告质量评估 |
-| Observability | Langfuse Trace、Token、Latency、Cost |
+| Observability | Agent 执行 Trace（SSE 事件 → steps/tool_calls 落库） |
 | Deployment | 本地 venv + Docker 沙箱；最终 Docker Compose + Nginx + PostgreSQL + Redis + MinIO |
 
 ---
@@ -166,8 +166,8 @@ User Query → Create Analysis → LangGraph Thread
        │                                        │
        ▼                                        ▼
 ┌─────────────┐                        ┌──────────────┐
-│ Tools       │                        │ Langfuse     │
-│ SQL/Python  │                        │ Trace/Eval   │
+│ Tools       │                        │ Agent Trace  │
+│ SQL/Python  │                        │ SSE steps/db │
 │ DuckDB      │                        └──────────────┘
 │ Dataset     │
 │ Chart       │
@@ -199,7 +199,7 @@ PostgreSQL  DuckDB   Sandbox(Docker)
 | Cache/Queue | Redis（本地原生） | 缓存、任务队列 |
 | Storage | MinIO（本地原生） | 上传数据文件 |
 | Sandbox | Docker | Python 安全执行 |
-| Observability | Langfuse | Trace / Evaluation / Cost |
+| Observability | 自研 Agent Trace（SSE + agent_steps/tool_calls） | Token / Latency / Cost |
 | Deployment | Docker Compose + Nginx（最终阶段） | 部署 |
 
 ---
@@ -484,8 +484,8 @@ Agent → Risk Detection → interrupt() → Frontend Approval UI
 
 ## 13. Observability 与 Evaluation
 
-### 13.1 Langfuse Trace
-AgentViz(即 InsightFlow) → Langfuse：Trace / LLM Calls / Tool Calls / Tokens / Cost / Latency / Evaluation。
+### 13.1 Agent Trace
+每次分析运行以 SSE 事件流驱动，`_build_trace` 规整为 AgentRun / AgentStep / ToolCall 落 PostgreSQL；前端以执行时间线展示 Agent / Tool 调用、Token、耗时与成本。实现为自研方案（未引入第三方可观测平台）。
 
 ### 13.2 Evaluation 数据集
 ```
@@ -585,7 +585,7 @@ insightflow/
 | Phase 3 | Week 3 | LangGraph、State、Checkpoint、SSE | 任务可流式执行并恢复 |
 | Phase 4 | Week 4-5 | Planner + Multi-Agent + Reviewer | 完整 Agent Workflow 跑通 |
 | Phase 5 | Week 6 | ECharts + react-three-fiber | 自动生成 2D/3D 可视化 |
-| Phase 6 | Week 7 | Trace + Langfuse | 可查看完整 Agent 执行过程 |
+| Phase 6 | Week 7 | Agent Trace（SSE + 落库） | 可查看完整 Agent 执行过程 |
 | Phase 7 | Week 8 | Report、分享、导出 | 生成完整分析报告 |
 | Phase 8 | Week 9 | Evaluation | 有可重复评测数据集和指标 |
 | Phase 9 | Week 10 | 部署与优化 | 公网可访问、稳定运行 |
@@ -644,7 +644,6 @@ CSV Upload、Data Profiling、DuckDB、SQL Tool、Python Tool、Single Agent Loo
 | redis | Redis | 缓存/队列 |
 | minio | MinIO | 文件存储 |
 | sandbox | Python Docker | 代码执行 |
-| langfuse | Langfuse | 可观测性 |
 | nginx | Nginx | 反向代理 |
 
 ### 19.3 线上部署
@@ -667,7 +666,7 @@ Browser → HTTPS → Nginx
 - 基于 LangGraph + FastAPI + Next.js 构建具备任务规划、工具调用、多 Agent 协作、结果审查与状态持久化能力的数据分析 Agent。
 - Planner–Data–Analysis–Visualization–Reviewer 工作流，支持 SQL/Python/DuckDB 工具调用、失败重试与 Human-in-the-loop。
 - 结构化 ChartSpec 驱动 ECharts / react-three-fiber，实现 Agent 自动选择并生成 2D/3D 交互式可视化。
-- Langfuse 构建 Agent Trace 与 Evaluation 体系，记录 Tool Calls、Token、Latency、Cost 并评估任务正确率。
+- 自研 Agent Trace（SSE 事件 → agent_steps/tool_calls 落库）记录每次运行的工具调用、Token、Latency 与成本。
 - 本地 venv + Docker 沙箱隔离 Agent 生成代码执行；PostgreSQL + Redis + MinIO 容器化部署。
 
 ### 20.3 面试必须能讲清楚的问题
@@ -701,11 +700,10 @@ Browser → HTTPS → Nginx
 | 11 | 加入 Reviewer | 验证 + Retry |
 | 12 | 加入 react-three-fiber | 3D 数据探索 |
 | 13 | 加入 Agent Trace | SSE + agent_steps |
-| 14 | 接入 Langfuse | Trace + Cost + Latency |
-| 15 | 加入 Evaluation | Golden Dataset + Evaluator |
-| 16 | 生成 Report | HTML/PDF |
-| 17 | Docker 化 | 一键启动 |
-| 18 | 云服务器部署 | Nginx + HTTPS |
+| 14 | 加入 Evaluation | Golden Dataset + Evaluator |
+| 15 | 生成 Report | HTML/PDF |
+| 16 | Docker 化 | 一键启动 |
+| 17 | 云服务器部署 | Nginx + HTTPS |
 
 ---
 

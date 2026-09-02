@@ -29,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.root_cause import RootCause
+from app.services.md import codehilite_css, highlight_code, md_to_html
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +400,8 @@ _EXTRA_CSS = """
 .evchain .evnode{margin-bottom:12px;}
 .evchain .evlvl{color:var(--accent);font-weight:700;font-size:12px;}
 .evchain pre{margin-top:6px;}
+.evclaim .md p{display:inline;margin:0;}
+.evclaim .md{display:inline;}
 ul.checks{list-style:none;padding:0;margin:0;}
 ul.checks li{padding:6px 10px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:13px;}
 table.evtable td,table.evtable th{font-size:12px;}
@@ -452,7 +455,7 @@ def render_html_export(data: dict[str, Any]) -> str:
                 f"<tbody>{rows}</tbody></table>"
             )
         if rc.get("conclusion"):
-            parts.append(f"<p class='summary'><b>结论：</b>{esc(rc['conclusion'])}</p>")
+            parts.append(f"<div class='summary'><b>结论：</b>{md_to_html(rc['conclusion'])}</div>")
         if rc.get("confidence") is not None:
             conf = rc.get("confidence")
             badge_cls = "badge-high" if conf >= 0.9 else "badge-mid" if conf >= 0.7 else "badge-low"
@@ -481,7 +484,7 @@ def render_html_export(data: dict[str, Any]) -> str:
             metric = ev.get("metric") or ""
             metric_html = f"<span>指标：<code>{esc(metric)}</code></span>" if metric else ""
             sql = (ev.get("sql") or "").strip()
-            sql_html = f"<pre class='code'>{esc(sql)}</pre>" if sql else ""
+            sql_html = highlight_code(sql, "sql") if sql else ""
             # result rows (small sample)
             res = ev.get("result") or {}
             tbl = ""
@@ -496,7 +499,7 @@ def render_html_export(data: dict[str, Any]) -> str:
             ev_items.append(
                 f"<div class='evnode'>"
                 f"<span class='evlvl'>L{level}</span> "
-                f"<b>{esc(claim)}</b>{badge}"
+                f"<div class='evclaim'>{md_to_html(claim)}</div>{badge}"
                 f"<div>{metric_html}</div>"
                 f"{sql_html}{tbl}"
                 f"</div>"
@@ -521,7 +524,7 @@ def render_html_export(data: dict[str, Any]) -> str:
         for c in evalr.get("checks") or []:
             mk = "✅" if c.get("passed") else "❌"
             detail = c.get("detail") or ""
-            detail_html = f"<div style='color:var(--muted);font-size:12px'>{esc(detail)}</div>" if detail and not c.get("passed") else ""
+            detail_html = f"<div style='color:var(--muted);font-size:12px'>{md_to_html(detail)}</div>" if detail and not c.get("passed") else ""
             checks_rows += f"<li>{mk} {esc(c.get('name') or c.get('rule') or '规则')}{detail_html}</li>"
         conf_gate = evalr.get("confidence_gate") or {}
         cov = evalr.get("coverage") or {}
@@ -562,7 +565,7 @@ def render_html_export(data: dict[str, Any]) -> str:
     base = base.replace("<style>{_CSS}</style>", f"<style>{_CSS}</style>", 1)  # no-op
     # Add extra CSS right after the base <style> block.
     marker_css = "<style>"
-    insert_css = f"<style>{_EXTRA_CSS}</style>"
+    insert_css = f"<style>{_EXTRA_CSS}\n{codehilite_css()}</style>"
     base = base.replace(marker_css, marker_css, 1).replace("</head>", insert_css + "</head>", 1)
 
     # Insert root-cause / evidence-chain / eval sections after the executive

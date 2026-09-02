@@ -293,4 +293,3 @@ reviewer 直接查表核对（因此 `evidences` 表在 P0 即启用，不推到
 - **Evidence Graph**：`evidences.parent_id` 扩展为有向图，支持多跳溯源的完整证据链可视化。
 - **Data Source 统一**：文件 / 直连 DB 抽象为统一 source 接口（当前 file/db 均已落到 DuckDB，接入成本低）。
 - **Evaluation 2.0**：用 `evidences` 表 + 置信度做自动化断言评估，替代纯 LLM 评分。
-- **Langfuse 接入**：P0 新节点的事件/置信度/证据可挂 Langfuse 可观测。

@@ -18,6 +18,9 @@ from sqlalchemy import func, select
 from app.agent.graph import build_graph
 from app.agent import nodes
 from app.core.config import settings
+from app.db.session import AsyncSessionLocal
+from app.models.analysis import Analysis
+from app.models.trace import AgentRun, AgentStep, ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +29,6 @@ _STREAM_SENTINEL = object()
 
 # Compiled graph instance (Phase 3 topology: planner→analysis→visualization→reviewer).
 GRAPH = build_graph()
-from app.db.session import AsyncSessionLocal
-from app.models.analysis import Analysis
-from app.models.trace import AgentRun, AgentStep, ToolCall
 
 
 class DatasetRef(TypedDict):
@@ -144,6 +144,34 @@ def _build_trace(events: list[dict]) -> tuple[list[dict], list[dict]]:
                     status="error",
                 )
             )
+
+    # 未配对的 tool_start（超时 / 异常中断，没有等到对应的 tool_end）：
+    # 这些正是定位「卡在哪一步」的关键线索，必须落库，否则在 trace 里会凭空消失。
+    for started in stack:
+        order += 1
+        tool = started.get("tool")
+        tc = dict(
+            tool=tool,
+            input=started.get("input"),
+            output={"error": "调用未完成（分析中断或超时）"},
+            status="error",
+            duration_ms=0,
+            ts_ms=started.get("start", 0),
+        )
+        tool_calls.append(tc)
+        steps.append(
+            dict(
+                agent="analysis",
+                step_type="tool",
+                content=f"{tool} 工具调用（未完成）",
+                input=tc["input"],
+                output=tc["output"],
+                status="error",
+                duration_ms=0,
+                ts_ms=tc["ts_ms"],
+                order_idx=order,
+            )
+        )
     return steps, tool_calls
 
 
@@ -185,6 +213,9 @@ async def run_analysis(
     ]
     schema_text = "\n\n".join(r["schema_text"] for r in refs)
 
+    # 每次运行使用独立的 thread_id：checkpoint 命名空间互相隔离，新 run 不会
+    # 继承上一次的图状态。将来若要支持「断点续跑」，可把 thread_id 固定为
+    # analysis_id，但必须同时显式处理「重新运行」时的 checkpoint 重置。
     thread_id = str(uuid4())
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -231,39 +262,43 @@ async def run_analysis(
         "semantic_dimensions": list(confirmed_dims),
     }
 
-    # Create the run row up-front (status=running) so /trace is queryable early.
-    # 同时负责「置运行态」的统一职责 + 崩溃恢复：
-    # - 把本 analysis 任何遗留 status="running" 的 AgentRun 标为 error（interrupted），
-    #   避免进程崩溃后 run 永久挂起。
-    # - 把 Analysis.status 置为 running（路由层不再重复 set_running）。
-    async with AsyncSessionLocal() as db:
-        now = datetime.utcnow()
-        stale = (
-            await db.execute(
-                select(AgentRun).where(
-                    AgentRun.analysis_id == analysis_id, AgentRun.status == "running"
-                )
-            )
-        ).scalars().all()
-        for r in stale:
-            r.status = "error"
-            r.finished_at = now
-
-        analysis = await db.get(Analysis, analysis_id)
-        if analysis is not None:
-            analysis.status = "running"
-
-        run = AgentRun(analysis_id=analysis_id, thread_id=thread_id, status="running")
-        db.add(run)
-        await db.commit()
-        await db.refresh(run)
-        run_id = run.id
-
     started = datetime.utcnow()
     final: Any = None
     # 收集本 run 已产出的事件：超时/异常路径也用它持久化诊断信息（否则 trace 为空）。
     seen_events: list[dict] = []
+    # 建 run 失败时保持 None，异常分支据此跳过 trace 落库（避免 NameError）。
+    run_id: str | None = None
     try:
+        # Create the run row up-front (status=running) so /trace is queryable early.
+        # 同时负责「置运行态」的统一职责 + 崩溃恢复：
+        # - 把本 analysis 任何遗留 status="running" 的 AgentRun 标为 error（interrupted），
+        #   避免进程崩溃后 run 永久挂起。
+        # - 把 Analysis.status 置为 running（路由层不再重复 set_running）。
+        # 整段纳入 try：建 run 失败（DB 不可用等）也必须走异常分支，否则
+        # analysis 会永远停在 running，且客户端收不到任何 error 帧。
+        async with AsyncSessionLocal() as db:
+            now = datetime.utcnow()
+            stale = (
+                await db.execute(
+                    select(AgentRun).where(
+                        AgentRun.analysis_id == analysis_id, AgentRun.status == "running"
+                    )
+                )
+            ).scalars().all()
+            for r in stale:
+                r.status = "error"
+                r.finished_at = now
+
+            analysis = await db.get(Analysis, analysis_id)
+            if analysis is not None:
+                analysis.status = "running"
+
+            run = AgentRun(analysis_id=analysis_id, thread_id=thread_id, status="running")
+            db.add(run)
+            await db.commit()
+            await db.refresh(run)
+            run_id = run.id
+
         # Live streaming: nodes push every event onto this queue via _ev(), so we
         # can yield events to the SSE client as soon as they are produced instead
         # of buffering the whole graph run and dumping everything at the end.
@@ -403,11 +438,13 @@ async def run_analysis(
 
         async with AsyncSessionLocal() as db:
             analysis = await db.get(Analysis, analysis_id)
-            analysis.status = "completed"
-            analysis.result_json = json.dumps(result, ensure_ascii=False)
-            analysis.answer = answer
-            analysis.prompt_tokens = pt
-            analysis.completion_tokens = ct
+            # 分析行可能已被并发删除；与异常分支保持一致，避免 AttributeError。
+            if analysis is not None:
+                analysis.status = "completed"
+                analysis.result_json = json.dumps(result, ensure_ascii=False)
+                analysis.answer = answer
+                analysis.prompt_tokens = pt
+                analysis.completion_tokens = ct
 
             run = await db.get(AgentRun, run_id)
             run.status = "completed"
@@ -429,14 +466,6 @@ async def run_analysis(
             db.add_all(run_tools)
             await db.commit()
 
-        # Optional Langfuse export (no-op unless keys configured).
-        try:
-            from app.services.langfuse_exporter import export_trace
-
-            export_trace(run.to_summary(), [s.to_dict() for s in run_steps], [tc.to_dict() for tc in run_tools])
-        except Exception:  # noqa: BLE001
-            pass
-
         yield {
             "type": "agent_end",
             "status": "completed",
@@ -450,25 +479,37 @@ async def run_analysis(
     except Exception as exc:  # noqa: BLE001
         finished = datetime.utcnow()
         latency_ms = int((finished - started).total_seconds() * 1000)
-        async with AsyncSessionLocal() as db:
-            analysis = await db.get(Analysis, analysis_id)
-            if analysis is not None:
-                analysis.status = "error"
-                analysis.result_json = json.dumps({"answer": "", "error": str(exc)}, ensure_ascii=False)
-                analysis.answer = ""
-            run = await db.get(AgentRun, run_id)
-            if run is not None:
-                run.status = "error"
-                run.latency_ms = latency_ms
-                run.finished_at = finished
-                # 故障诊断：即使失败也持久化已发生的事件（steps/tool_calls），
-                # 否则超时/崩溃时 trace 为空，无法定位卡在哪一步。
-                if seen_events:
-                    steps, tool_calls = _build_trace(seen_events)
-                    run.tool_calls = len(tool_calls)
-                    db.add_all([AgentStep(run_id=run_id, **s) for s in steps])
-                    db.add_all([ToolCall(run_id=run_id, **tc) for tc in tool_calls])
-            await db.commit()
+        # 失败路径同样持久化已发生的事件（见下），先准备空列表占位。
+        err_steps: list[AgentStep] = []
+        err_tools: list[ToolCall] = []
+        # 落库失败不能吞掉给客户端的错误反馈，因此单独兜住：即便 DB 不可用，
+        # 下面的 error / agent_end 帧也必须发得出去。
+        try:
+            async with AsyncSessionLocal() as db:
+                analysis = await db.get(Analysis, analysis_id)
+                if analysis is not None:
+                    analysis.status = "error"
+                    analysis.result_json = json.dumps({"answer": "", "error": str(exc)}, ensure_ascii=False)
+                    analysis.answer = ""
+                if run_id is not None:
+                    run = await db.get(AgentRun, run_id)
+                    if run is not None:
+                        run.status = "error"
+                        run.latency_ms = latency_ms
+                        run.finished_at = finished
+                        # 故障诊断：即使失败也持久化已发生的事件（steps/tool_calls），
+                        # 否则超时/崩溃时 trace 为空，无法定位卡在哪一步。
+                        if seen_events:
+                            steps, tool_calls = _build_trace(seen_events)
+                            run.tool_calls = len(tool_calls)
+                            err_steps = [AgentStep(run_id=run_id, **s) for s in steps]
+                            err_tools = [ToolCall(run_id=run_id, **tc) for tc in tool_calls]
+                            db.add_all(err_steps)
+                            db.add_all(err_tools)
+                await db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to persist error state for analysis %s", analysis_id)
+
         logger.exception("analysis %s failed", analysis_id)
         yield {
             "type": "error",

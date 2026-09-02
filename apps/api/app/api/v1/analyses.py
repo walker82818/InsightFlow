@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import DatasetRef, run_analysis
 from app.api.v1.deps import get_current_user
+from app.core.config import settings
 from app.db.session import get_session
 from app.models.analysis import Analysis
 from app.models.dataset import Dataset, DatasetColumn

@@ -37,6 +37,20 @@ class LLMResponse:
     raw: Any | None = None
 
 
+class LLMTimeoutError(RuntimeError):
+    """Raised when a single LLM call exceeds its timeout budget.
+
+    Subclass of ``RuntimeError`` so existing call sites that catch
+    ``RuntimeError`` (planner/analysis/reviewer nodes) keep working unchanged;
+    callers that need to distinguish timeouts from other failures (e.g. the
+    visualization node, which retries on timeout only) catch this type.
+    """
+
+    def __init__(self, message: str, *, timeout: float) -> None:
+        super().__init__(message)
+        self.timeout = timeout
+
+
 class LLMClient:
     """Minimal chat-completions contract used by the agent loop."""
 
@@ -48,7 +62,14 @@ class LLMClient:
         tool_choice: Literal["auto", "none"] = "auto",
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        timeout: float | None = None,
     ) -> LLMResponse:
+        """Run a chat completion.
+
+        ``timeout`` overrides the per-call budget (defaults to
+        ``settings.llm_call_timeout``). On timeout an ``LLMTimeoutError``
+        (a ``RuntimeError`` subclass) is raised.
+        """
         raise NotImplementedError
 
     async def is_configured(self) -> bool:

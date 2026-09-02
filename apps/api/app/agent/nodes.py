@@ -24,7 +24,7 @@ from app.agent.tools.python_tool import (
 )
 from app.core.config import settings
 from app.core.llm import ModelSize, get_llm_client
-from app.core.llm.base import LLMMessage, ToolCall
+from app.core.llm.base import LLMMessage, LLMResponse, LLMTimeoutError, ToolCall
 
 
 # Live streaming side-channel. run_analysis() sets this contextvar to an
@@ -561,12 +561,26 @@ async def visualization_node(state: AgentState) -> dict[str, Any]:
             ),
         ),
     ]
-    try:
-        resp = await client.chat(messages, temperature=0.2)
-    except RuntimeError as exc:
+    # ⑤b 可视化预算治理：单次调用用较短的超时（全局 llm_call_timeout=120s 相对
+    # pipeline 总预算 180s 占比过高，一次超时就几乎吃光预算），且只对「超时」
+    # 重试一次——瞬时拥堵重试成功率高；配置缺失等其它 RuntimeError 立即失败
+    # （重试无意义）。最坏 2×60s=120s，仍在全局墙钟之内。
+    viz_timeout = min(settings.llm_call_timeout, 60.0)
+    last_error = ""
+    resp: LLMResponse | None = None
+    for _attempt in range(2):
+        try:
+            resp = await client.chat(messages, temperature=0.2, timeout=viz_timeout)
+            break
+        except LLMTimeoutError as exc:
+            last_error = str(exc)  # 超时：进入下一轮尝试
+        except RuntimeError as exc:
+            last_error = str(exc)
+            break  # 非超时错误（如 key 未配置）不重试
+    if resp is None:
         return {
             "visualizations": [],
-            "events": [_ev("error", message=f"可视化失败: {exc}")],
+            "events": [_ev("error", message=f"可视化失败: {last_error}")],
         }
     spec = _extract_artifact_spec(
         resp.content, title_fallback=state["user_query"], data=data

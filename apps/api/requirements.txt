@@ -40,6 +40,7 @@ httpx>=0.27
 # 浏览器优先复用系统 Edge（channel="msedge"），否则需 `playwright install chromium`。
 playwright>=1.49
 
-# Observability (Phase 6): optional. Only imported lazily by
-# app/services/langfuse_exporter.py when LANGFUSE_* keys are set; safe to omit.
-langfuse>=2.0
+# Report export: markdown -> HTML rendering + Pygments syntax highlighting
+# (server-side, so print/PDF and downloaded HTML are fully rendered).
+markdown>=3.6
+Pygments>=2.18

@@ -86,11 +86,17 @@ async def _get_browser() -> Any:
 
 
 def _runtime_url(spec: dict[str, Any]) -> str:
+    # spec 走 URL **fragment**（#spec=）而不是查询串（?spec=）：
+    # fragment 不会随 HTTP 请求发送到服务端，因此不受 Next dev server
+    # （Node 默认 maxHeaderSize=16KB）等中间件的请求行长度限制——
+    # 用 ?spec= 时，稍长的图表代码就会触发 431 Request Header Fields Too Large，
+    # Playwright 侧表现为 net::ERR_HTTP_RESPONSE_CODE_FAILURE，截图 503。
+    # ensure_ascii=False：中文按 UTF-8 原样编码，比 \uXXXX 转义节省一半以上体积。
     payload = base64.urlsafe_b64encode(
-        json.dumps(spec, ensure_ascii=True).encode("utf-8")
+        json.dumps(spec, ensure_ascii=False).encode("utf-8")
     ).decode("ascii")
     base = settings.artifact_runtime_url.rstrip("/")
-    sep = "&" if "?" in base else "?"
+    sep = "&" if "#" in base else "#"
     return f"{base}{sep}spec={payload}"
 
 

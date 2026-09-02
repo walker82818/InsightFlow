@@ -265,10 +265,15 @@
       post({ type: "ready", height: measureHeight() });
 
       // ---- Standalone 模式（P2 截图服务）----
-      // 顶层打开且 URL 带 ?spec=<base64url(JSON)> 时，不依赖父页面 postMessage，
+      // 顶层打开且 URL 带 #spec=<base64url(JSON)> 时，不依赖父页面 postMessage，
       // 直接自渲染（供后端 Playwright 无头截图 / 报告快照）。
+      // 用 fragment 而非查询串：fragment 不随请求发送到服务端，
+      // 避免长图表代码触发服务端 431（请求行 >16KB）。
+      // 仍兼容旧的 ?spec= 写法。
       // 完成后设置 window.__ARTIFACT_DONE，供外部轮询。
-      const specParam = new URLSearchParams(location.search).get("spec");
+      const specParam =
+        new URLSearchParams(location.hash.slice(1)).get("spec") ||
+        new URLSearchParams(location.search).get("spec");
       if (specParam) {
         (async () => {
           let done;
